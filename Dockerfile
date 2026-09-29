@@ -28,9 +28,10 @@ RUN mkdir -p /app/data /app/certs
 # Copia as dependências instaladas do estágio anterior
 COPY --from=deps /app/node_modules ./node_modules
 
-# Copia o código-fonte da aplicação e configurações necessárias
+# Copia o código-fonte da aplicação, documentação OpenAPI e configurações
 COPY package.json tsconfig.json ./
 COPY src ./src
+COPY docs ./docs
 
 # Garante que a aplicação execute com usuário não-privilegiado (segurança)
 RUN chown -R bun:bun /app

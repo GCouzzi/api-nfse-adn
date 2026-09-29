@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import path from "path";
+import fs from "fs";
 import { config } from "./config/env";
 import { initDatabase, repository } from "./database";
 import { authMiddleware } from "./middlewares/authMiddleware";
@@ -32,6 +34,8 @@ app.get("/", (req, res) => {
     outboundThrottlingMs: config.adnRequestDelayMs,
     endpoints: {
       health: "GET /health",
+      documentacaoInterativa: "GET /docs",
+      especificacaoOpenAPI: "GET /docs/openapi.json",
       sincronizarNSU_Async: "POST /api/sync",
       consultarJobSync: "GET /api/sync/jobs/:id",
       listarJobsSync: "GET /api/sync/jobs?cnpj={cnpj}",
@@ -54,6 +58,34 @@ app.get("/health", (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
   });
+});
+
+// Especificação OpenAPI 3.0 em JSON (público)
+app.get("/docs/openapi.json", (req, res) => {
+  const specPath = path.resolve(process.cwd(), "docs", "openapi.json");
+  if (fs.existsSync(specPath)) {
+    res.setHeader("Content-Type", "application/json");
+    res.sendFile(specPath);
+  } else {
+    res.status(404).json({ success: false, error: "Arquivo openapi.json não encontrado." });
+  }
+});
+
+// Interface visual interativa de documentação (Scalar / Swagger)
+app.get("/docs", (req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(`<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <title>API NFS-e Nacional - Documentação Interativa</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <script id="api-reference" data-url="/docs/openapi.json" data-configuration='{"theme":"purple","layout":"modern"}'></script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+  </body>
+</html>`);
 });
 
 // Rotas da API protegidas por autenticação via API Token
@@ -84,8 +116,7 @@ async function bootstrap() {
       console.log(`📡 Ambiente ADN: ${config.adnEnv.toUpperCase()} (${config.adnBaseUrl})`);
       console.log(`🔒 Modo Mock: ${config.enableMock ? "ATIVADO (simulação)" : "DESATIVADO (mTLS real)"}`);
       console.log(`🔑 Autenticação: ${config.apiToken ? "ATIVADA (Token obrigatório)" : "DESATIVADA (Modo aberto/Dev)"}`);
-      console.log(`⏱️  Throttling ADN: ${config.adnRequestDelayMs}ms entre requisições consecutivas`);
-      console.log(`🛡️  Rate Limit API: ${config.rateLimitMax} reqs a cada ${config.rateLimitWindowMs / 1000}s`);
+      console.log(`📖 Documentação Interativa: http://localhost:${config.port}/docs`);
       console.log(`🌐 Base URL: http://localhost:${config.port}`);
       console.log(`=======================================================`);
     });

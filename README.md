@@ -6,6 +6,17 @@ Projetada para implantação simplificada e segura em **VPSs / servidores dedica
 
 ---
 
+## 📖 Documentação da API
+
+A API conta com documentação completa disponível em múltiplos formatos:
+
+- **Interface Visual Interativa (Swagger / OpenAPI)**: Disponível diretamente no navegador ao rodar a API em:
+  👉 **`http://localhost:3000/docs`** (ou `http://IP_DA_SUA_VPS:3000/docs`)
+- **Guia Completo em Markdown**: Disponível em [docs/API.md](docs/API.md) com exemplos de cURL, tabelas de parâmetros e payloads JSON detalhados.
+- **Especificação OpenAPI 3.0 (JSON)**: Disponível em [docs/openapi.json](docs/openapi.json) ou no endpoint `GET /docs/openapi.json` para importar diretamente no Postman, Insomnia ou Swagger Editor.
+
+---
+
 ## 🚀 Principais Recursos
 
 - **Execução Otimizada em Bun**: Inicialização instantânea e baixíssimo consumo de memória RAM (~20-40 MB).
@@ -93,7 +104,7 @@ curl -H "Authorization: Bearer SUA_CHAVE_AQUI" http://seu-ip:3000/api/notas?cnpj
 curl -H "x-api-key: SUA_CHAVE_AQUI" http://seu-ip:3000/api/notas?cnpj=12345678000195
 ```
 
-*(Rotas públicas sem autenticação: `GET /` e `GET /health`)*
+*(Rotas públicas sem autenticação: `GET /`, `GET /health` e `GET /docs`)*
 
 ---
 
@@ -150,130 +161,17 @@ bun run start  # Produção
 
 ---
 
-## 📡 Endpoints da API
+## 📡 Resumo Rápido dos Endpoints
 
-### 1. Sincronizar Documentos por NSU (Assíncrono com Mutex Lock)
-Dispara a sincronização em segundo plano. Responde `202 Accepted` imediatamente com o identificador do Job.
+> Para a documentação completa com esquemas JSON e exemplos de resposta, acesse [docs/API.md](docs/API.md) ou a rota interativa `/docs`.
 
-- **Rota**: `POST /api/sync`
-- **Headers**: `Authorization: Bearer <API_TOKEN>`
-- **Body**:
-```json
-{
-  "cnpj": "12345678000195",
-  "nsuInicial": 0,
-  "maxLoops": 10
-}
-```
-- **Resposta (202 Accepted)**:
-```json
-{
-  "success": true,
-  "message": "Sincronização enfileirada com sucesso em segundo plano.",
-  "data": {
-    "id": 1,
-    "cnpj": "12345678000195",
-    "status": "QUEUED",
-    "created_at": "2026-09-29T13:00:00.000Z"
-  }
-}
-```
-*(Se já houver uma sincronização em execução para este CNPJ, a API retorna `409 Conflict` informando o Job ativo).*
-
-> **Nota:** Caso queira aguardar a sincronização de forma síncrona em scripts, envie `"async": false` no corpo da requisição ou `POST /api/sync?sync=true`.
-
----
-
-### 2. Consultar Andamento de um Job de Sincronização
-- **Rota**: `GET /api/sync/jobs/:id`
-- **Resposta**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "cnpj": "12345678000195",
-    "status": "COMPLETED",
-    "nsu_inicial": 0,
-    "nsu_final": 10,
-    "novos_documentos": 10,
-    "total_notas": 9,
-    "total_eventos": 1,
-    "ciclos_executados": 10,
-    "finished_at": "2026-09-29T13:00:05.000Z"
-  }
-}
-```
-
----
-
-### 3. Listar Histórico de Jobs
-- **Rota**: `GET /api/sync/jobs?cnpj={cnpj}&limit=20`
-
----
-
-### 4. Consultar Status do NSU do CNPJ
-- **Rota**: `GET /api/sync/:cnpj`
-
----
-
-### 5. Listar Notas Fiscais por CNPJ (`findAllByCnpj`)
-Retorna todas as notas fiscais do CNPJ acompanhadas de todos os seus eventos fiscais (cancelamentos, confirmações) e metadados dos XMLs em uma única resposta JSON otimizada.
-
-- **Rota**: `GET /api/notas?cnpj={cnpj}`
-- **Query Params**:
-  - `cnpj` (obrigatório)
-  - `status` (opcional): `AUTORIZADA`, `CANCELADA`, etc.
-  - `papel` (opcional): `todos` (padrão), `prestador`, `tomador`
-  - `limit` e `offset`: paginação
-- **Resposta**:
-```json
-{
-  "success": true,
-  "total": 1,
-  "data": [
-    {
-      "id": 1,
-      "chave_acesso": "43260912345678000195550010000000011234567890",
-      "nsu": 1,
-      "cnpj_prestador": "12345678000195",
-      "cnpj_tomador": "98765432000188",
-      "razao_social_prestador": "EMPRESA PRESTADORA LTDA",
-      "razao_social_tomador": "TOMADOR DOS SERVICOS S.A.",
-      "numero_nfse": "100",
-      "serie": "1",
-      "valor_servicos": 1500.0,
-      "valor_liquido": 1450.0,
-      "status": "AUTORIZADA",
-      "eventos": [
-        {
-          "id": 1,
-          "tipo_evento": "CONFIRMACAO_TOMADOR",
-          "descricao_evento": "Confirmação da Prestação do Serviço pelo Tomador",
-          "data_hora_evento": "2026-09-29T12:00:00Z"
-        }
-      ],
-      "documentos": [
-        {
-          "id": 1,
-          "tipo_documento": "NFSE",
-          "data_hora_geracao": "2026-09-29T12:00:00Z"
-        },
-        {
-          "id": 2,
-          "tipo_documento": "EVENTO",
-          "tipo_evento": "CONFIRMACAO_TOMADOR"
-        }
-      ]
-    }
-  ]
-}
-```
-
----
-
-### 6. Downloads de XML e ZIP
-- **Download XML da NFS-e**: `GET /api/notas/:chaveAcesso/xml`
-- **Download ZIP da Nota + Eventos**: `GET /api/notas/:chaveAcesso/zip`
-- **Download ZIP de todas as Notas e Eventos do CNPJ**: `GET /api/notas/cnpj/:cnpj/zip`
-- **Download Documento por ID**: `GET /api/notas/documento/:id/xml`
+- `POST /api/sync`: Dispara a sincronização de NSUs em segundo plano (responde `202 Accepted`).
+- `GET /api/sync/jobs/:id`: Consulta o status e andamento de um Job.
+- `GET /api/sync/jobs?cnpj={cnpj}`: Lista histórico de jobs de sincronização.
+- `GET /api/sync/:cnpj`: Consulta o último NSU sincronizado para um CNPJ.
+- `GET /api/notas?cnpj={cnpj}`: Lista notas fiscais de um CNPJ com eventos e XMLs (`findAllByCnpj`).
+- `GET /api/notas/:chaveAcesso`: Detalhes de uma nota fiscal por chave de acesso.
+- `GET /api/notas/:chaveAcesso/xml`: Download direto do XML da NFS-e.
+- `GET /api/notas/:chaveAcesso/zip`: Download do pacote ZIP da nota com eventos.
+- `GET /api/notas/cnpj/:cnpj/zip`: Download do pacote ZIP completo do CNPJ.
+- `GET /api/notas/documento/:id/xml`: Download de um XML individual por ID.
