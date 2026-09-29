@@ -1,0 +1,85 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: nfse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nfse_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    # Parâmetros de alta performance para PostgreSQL
+    command: >
+      postgres
+      -c max_connections=100
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=4MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-nfse_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1024M
+        reservations:
+          memory: 256M
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nfse-api-postgres
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    secrets:
+      - cert_pfx
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_CLIENT=postgres
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nfse_db}
+      - PG_POOL_SIZE=${PG_POOL_SIZE:-20}
+      - API_TOKEN=${API_TOKEN:-}
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-60000}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-100}
+      - ADN_REQUEST_DELAY_MS=${ADN_REQUEST_DELAY_MS:-500}
+      - ADN_MAX_RETRIES=${ADN_MAX_RETRIES:-3}
+      - ADN_ENV=${ADN_ENV:-homologacao}
+      - ADN_BASE_URL_HOMOLOGACAO=${ADN_BASE_URL_HOMOLOGACAO:-https://adn.producaorestrita.nfse.gov.br}
+      - ADN_BASE_URL_PRODUCAO=${ADN_BASE_URL_PRODUCAO:-https://adn.nfse.gov.br}
+      - CERT_PASSWORD=${CERT_PASSWORD:-}
+      - ENABLE_MOCK=${ENABLE_MOCK:-true}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+
+secrets:
+  cert_pfx:
+    file: ${CERT_FILE:-./certs/certificado.pfx}
+
+volumes:
+  pg_data:
+    name: nfse_pg_data

@@ -1,0 +1,17 @@
+node_modules
+.git
+.gitignore
+.env
+.env.local
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+dist
+*.log
+.system_generated
+scratch
+certs/*.pfx
+certs/*.p12
+.DS_Store
+Thumbs.db

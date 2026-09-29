@@ -1,0 +1,43 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nfse-api-sqlite
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    secrets:
+      - cert_pfx
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_CLIENT=sqlite
+      - DB_PATH=/app/data/nfse.db
+      - API_TOKEN=${API_TOKEN:-}
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-60000}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-100}
+      - ADN_REQUEST_DELAY_MS=${ADN_REQUEST_DELAY_MS:-500}
+      - ADN_MAX_RETRIES=${ADN_MAX_RETRIES:-3}
+      - ADN_ENV=${ADN_ENV:-homologacao}
+      - ADN_BASE_URL_HOMOLOGACAO=${ADN_BASE_URL_HOMOLOGACAO:-https://adn.producaorestrita.nfse.gov.br}
+      - ADN_BASE_URL_PRODUCAO=${ADN_BASE_URL_PRODUCAO:-https://adn.nfse.gov.br}
+      - CERT_PASSWORD=${CERT_PASSWORD:-}
+      - ENABLE_MOCK=${ENABLE_MOCK:-true}
+    volumes:
+      - sqlite_data:/app/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+        reservations:
+          memory: 64M
+
+secrets:
+  cert_pfx:
+    file: ${CERT_FILE:-./certs/certificado.pfx}
+
+volumes:
+  sqlite_data:
+    name: nfse_sqlite_data

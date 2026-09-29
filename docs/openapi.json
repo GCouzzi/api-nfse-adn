@@ -1,0 +1,537 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "API NFS-e Nacional - ADN Contribuinte",
+    "description": "API REST de alta performance para sincronização e consulta de NFS-e (Notas Fiscais de Serviços Eletrônicas) e Eventos fiscais diretamente do Ambiente de Dados Nacional (ADN) via Procuração Eletrônica (Padrão 1).",
+    "version": "1.1.0",
+    "contact": {
+      "name": "Suporte API NFS-e"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Servidor Local / VPS"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    },
+    {
+      "ApiKeyAuth": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health Check da API",
+        "description": "Retorna o status operacional da aplicação e do banco de dados (aberto, sem autenticação).",
+        "tags": ["Sistema"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "API operacional",
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "UP",
+                  "database": "postgres",
+                  "timestamp": "2026-09-29T13:00:00.000Z",
+                  "uptime": 124.5
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync": {
+      "post": {
+        "summary": "Dispara sincronização incremental de NSUs",
+        "description": "Enfileira a sincronização de documentos fiscais para um CNPJ em segundo plano (Modo Assíncrono com Mutex Lock). Retorna imediatamente 202 Accepted. Se enviado com query `?sync=true` ou `{\"async\": false}`, executa de forma síncrona.",
+        "tags": ["Sincronização"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["cnpj"],
+                "properties": {
+                  "cnpj": {
+                    "type": "string",
+                    "example": "12345678000195",
+                    "description": "CNPJ com 14 dígitos (com ou sem máscara)"
+                  },
+                  "nsuInicial": {
+                    "type": "integer",
+                    "example": 0,
+                    "description": "NSU inicial para consulta (opcional, por padrão usa o último salvo)"
+                  },
+                  "maxLoops": {
+                    "type": "integer",
+                    "example": 10,
+                    "description": "Limite máximo de lotes a buscar nesta execução"
+                  },
+                  "async": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Se true, enfileira e responde 202. Se false, aguarda conclusão."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Sincronização enfileirada com sucesso (Modo Assíncrono)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Sincronização enfileirada com sucesso em segundo plano.",
+                  "data": {
+                    "id": 1,
+                    "cnpj": "12345678000195",
+                    "status": "QUEUED",
+                    "created_at": "2026-09-29T13:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflito: Já existe uma sincronização em execução para este CNPJ (Mutex Lock)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "message": "Já existe uma sincronização em andamento para este CNPJ.",
+                  "data": {
+                    "id": 1,
+                    "cnpj": "12345678000195",
+                    "status": "PROCESSING"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/api/sync/jobs/{id}": {
+      "get": {
+        "summary": "Consulta o andamento de um Job de Sincronização",
+        "description": "Retorna o status em tempo real, quantidades de notas/eventos importados e eventuais erros de um job.",
+        "tags": ["Sincronização"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Identificador único do Job"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dados do Job",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": 1,
+                    "cnpj": "12345678000195",
+                    "status": "COMPLETED",
+                    "nsu_inicial": 0,
+                    "nsu_final": 10,
+                    "novos_documentos": 10,
+                    "total_notas": 9,
+                    "total_eventos": 1,
+                    "ciclos_executados": 10,
+                    "erro": null,
+                    "created_at": "2026-09-29T13:00:00.000Z",
+                    "started_at": "2026-09-29T13:00:01.000Z",
+                    "finished_at": "2026-09-29T13:00:06.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job não encontrado"
+          }
+        }
+      }
+    },
+    "/api/sync/jobs": {
+      "get": {
+        "summary": "Lista histórico de Jobs de Sincronização",
+        "tags": ["Sincronização"],
+        "parameters": [
+          {
+            "name": "cnpj",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtrar histórico por CNPJ"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de jobs recentes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "total": 1,
+                  "data": []
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync/{cnpj}": {
+      "get": {
+        "summary": "Consulta status do último NSU de um CNPJ",
+        "tags": ["Sincronização"],
+        "parameters": [
+          {
+            "name": "cnpj",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status de sincronização do CNPJ",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": {
+                    "cnpj": "12345678000195",
+                    "ultimo_nsu": 10,
+                    "max_nsu": 10,
+                    "ultima_sincronizacao": "2026-09-29T13:00:06.000Z",
+                    "status": "SUCCESS",
+                    "emExecucao": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notas": {
+      "get": {
+        "summary": "Lista todas as notas fiscais de um CNPJ (findAllByCnpj)",
+        "description": "Retorna as notas fiscais do CNPJ acompanhadas de todos os seus eventos fiscais (cancelamentos, confirmações) e metadados dos XMLs em uma única resposta otimizada.",
+        "tags": ["Notas Fiscais"],
+        "parameters": [
+          {
+            "name": "cnpj",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "CNPJ a consultar (prestador ou tomador)"
+          },
+          {
+            "name": "papel",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["todos", "prestador", "tomador"],
+              "default": "todos"
+            },
+            "description": "Filtrar por papel fiscal do CNPJ"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["AUTORIZADA", "CANCELADA", "SUBSTITUIDA"]
+            },
+            "description": "Filtrar por status da nota"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de notas com eventos e documentos",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "total": 1,
+                  "data": [
+                    {
+                      "id": 1,
+                      "chave_acesso": "43260912345678000195550010000000011234567890",
+                      "nsu": 1,
+                      "cnpj_prestador": "12345678000195",
+                      "cnpj_tomador": "98765432000188",
+                      "razao_social_prestador": "EMPRESA PRESTADORA LTDA",
+                      "razao_social_tomador": "TOMADOR DOS SERVICOS S.A.",
+                      "numero_nfse": "100",
+                      "serie": "1",
+                      "data_emissao": "2026-09-29T12:00:00Z",
+                      "competencia": "2026-09-29",
+                      "valor_servicos": 1500.0,
+                      "valor_liquido": 1450.0,
+                      "descricao_servico": "Desenvolvimento de software",
+                      "status": "AUTORIZADA",
+                      "eventos": [
+                        {
+                          "id": 1,
+                          "tipo_evento": "CONFIRMACAO_TOMADOR",
+                          "descricao_evento": "Confirmação da Prestação do Serviço pelo Tomador",
+                          "data_hora_evento": "2026-09-29T12:30:00Z"
+                        }
+                      ],
+                      "documentos": [
+                        {
+                          "id": 1,
+                          "tipo_documento": "NFSE",
+                          "data_hora_geracao": "2026-09-29T12:00:00Z"
+                        },
+                        {
+                          "id": 2,
+                          "tipo_documento": "EVENTO",
+                          "tipo_evento": "CONFIRMACAO_TOMADOR"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notas/{chaveAcesso}": {
+      "get": {
+        "summary": "Consulta detalhes de uma nota fiscal por chave de acesso",
+        "tags": ["Notas Fiscais"],
+        "parameters": [
+          {
+            "name": "chaveAcesso",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detalhes completos da nota fiscal"
+          },
+          "404": {
+            "description": "Nota fiscal não encontrada"
+          }
+        }
+      }
+    },
+    "/api/notas/{chaveAcesso}/xml": {
+      "get": {
+        "summary": "Download do XML original da NFS-e",
+        "description": "Retorna o arquivo XML decodificado e descompactado com Content-Type application/xml.",
+        "tags": ["Downloads"],
+        "parameters": [
+          {
+            "name": "chaveAcesso",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arquivo XML da NFS-e",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notas/{chaveAcesso}/zip": {
+      "get": {
+        "summary": "Download do pacote ZIP da NFS-e com todos os seus eventos",
+        "tags": ["Downloads"],
+        "parameters": [
+          {
+            "name": "chaveAcesso",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arquivo ZIP contendo a NFS-e e seus eventos",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notas/cnpj/{cnpj}/zip": {
+      "get": {
+        "summary": "Download em lote de todos os XMLs de um CNPJ (ZIP)",
+        "description": "Gera um pacote .zip organizado em pastas /Notas e /Eventos com todos os XMLs vinculados ao CNPJ.",
+        "tags": ["Downloads"],
+        "parameters": [
+          {
+            "name": "cnpj",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arquivo ZIP com todos os XMLs do CNPJ",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notas/documento/{id}/xml": {
+      "get": {
+        "summary": "Download de um XML específico por ID",
+        "tags": ["Downloads"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arquivo XML solicitado",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Insira o token configurado no API_TOKEN"
+      },
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key",
+        "description": "Alternativa via cabeçalho x-api-key"
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Não autorizado: Token ausente ou inválido",
+        "content": {
+          "application/json": {
+            "example": {
+              "success": false,
+              "error": "Acesso não autorizado. Forneça um API Token válido."
+            }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "Limite de requisições excedido (Rate Limit)",
+        "content": {
+          "application/json": {
+            "example": {
+              "success": false,
+              "error": "Muitas requisições recebidas. Limite de taxa excedido. Tente novamente mais tarde."
+            }
+          }
+        }
+      }
+    }
+  }
+}
