@@ -38,7 +38,7 @@ services:
 
 secrets:
   cert_pfx:
-    file: ${CERT_FILE:-./certs/certificado.pfx}
+    file: ${CERT_PATH:-./certs/certificado.pfx}
 
 volumes:
   sqlite_data:
