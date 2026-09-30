@@ -69,18 +69,35 @@ export class AdnClient {
     }
 
     try {
-      const response = await this.axiosInstance.get<LoteDistribuicaoNSUResponse>(`/DFe/${nsu}`, {
+      const endpoint = config.adnBaseUrl.includes("/contribuintes")
+        ? `/DFe/${nsu}`
+        : `/contribuintes/DFe/${nsu}`;
+
+      console.log(`[AdnClient] Requisitando ADN: ${config.adnBaseUrl}${endpoint}?cnpjConsulta=${cnpjConsulta}&lote=${lote}`);
+
+      const response = await this.axiosInstance.get<LoteDistribuicaoNSUResponse>(endpoint, {
         params: {
           cnpjConsulta,
           lote
         }
       });
 
+      console.log(`[AdnClient] Resposta ADN: StatusProcessamento = "${response.data?.StatusProcessamento}", Documentos = ${response.data?.LoteDFe?.length ?? 0}`);
+      if (response.data?.Alertas?.length) {
+        console.warn(`[AdnClient] Alertas do ADN:`, response.data.Alertas);
+      }
+      if (response.data?.Erros?.length) {
+        console.error(`[AdnClient] Erros do ADN:`, response.data.Erros);
+      }
+
       return response.data;
     } catch (error: any) {
       if (error.response) {
         console.error(`[AdnClient] Erro HTTP ${error.response.status} do ADN:`, error.response.data);
-        return error.response.data as LoteDistribuicaoNSUResponse;
+        const errMsg = typeof error.response.data === "string" 
+          ? error.response.data 
+          : JSON.stringify(error.response.data);
+        throw new Error(`Erro HTTP ${error.response.status} retornado pelo ADN: ${errMsg}`);
       }
       throw new Error(`Falha na comunicação com o ADN (${config.adnBaseUrl}): ${error.message}`);
     }
