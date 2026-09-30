@@ -6,12 +6,12 @@ services:
     container_name: nfse-api-sqlite
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-4000}:4000"
     secrets:
       - cert_pfx
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=4000
       - DB_CLIENT=sqlite
       - DB_PATH=/app/data/nfse.db
       - API_TOKEN=${API_TOKEN:-}

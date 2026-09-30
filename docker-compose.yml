@@ -51,12 +51,12 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-4000}:4000"
     secrets:
       - cert_pfx
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=4000
       - DB_CLIENT=postgres
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nfse_db}
       - PG_POOL_SIZE=${PG_POOL_SIZE:-20}

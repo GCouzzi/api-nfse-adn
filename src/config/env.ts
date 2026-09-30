@@ -56,7 +56,7 @@ const detectedCertPassword = readSecretFile("/run/secrets/cert_password", proces
 const detectedApiToken = readSecretFile("/run/secrets/api_token", process.env.API_TOKEN || "");
 
 export const config: AppConfig = {
-  port: Number(process.env.PORT) || 3000,
+  port: Number(process.env.PORT) || 4000,
   adnEnv,
   adnBaseUrl: adnEnv === "producao" ? adnBaseUrlProducao : adnBaseUrlHomologacao,
   certPath: detectedCertPath,
