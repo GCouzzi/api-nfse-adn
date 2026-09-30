@@ -69,6 +69,8 @@ services:
       - ADN_BASE_URL_HOMOLOGACAO=${ADN_BASE_URL_HOMOLOGACAO:-https://adn.producaorestrita.nfse.gov.br}
       - ADN_BASE_URL_PRODUCAO=${ADN_BASE_URL_PRODUCAO:-https://adn.nfse.gov.br}
       - CERT_PASSWORD=${CERT_PASSWORD:-}
+      - CERT_PATH=${CERT_PATH:-}
+      - CERT_BASE64=${CERT_BASE64:-}
       - ENABLE_MOCK=${ENABLE_MOCK:-true}
     deploy:
       resources:
