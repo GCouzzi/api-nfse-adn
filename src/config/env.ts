@@ -23,6 +23,7 @@ export interface AppConfig {
   certPassword?: string;
   certBase64?: string;
   enableMock: boolean;
+  enableUi: boolean;
   dbClient: "postgres" | "sqlite";
   databaseUrl: string;
   pgPoolSize: number;
@@ -46,6 +47,22 @@ const adnBaseUrlProducao = process.env.ADN_BASE_URL_PRODUCAO || "https://adn.nfs
 
 const dbClient = (process.env.DB_CLIENT?.toLowerCase() === "sqlite" ? "sqlite" : "postgres") as "postgres" | "sqlite";
 
+function resolveSqlitePath(customPath: string | undefined, env: string): string {
+  if (!customPath) {
+    return path.resolve(process.cwd(), "data", `nfse_${env}.db`);
+  }
+  if (customPath.endsWith("nfse.db")) {
+    return customPath.replace(/nfse\.db$/, `nfse_${env}.db`);
+  }
+  if (customPath.includes(`_${env}.db`)) {
+    return customPath;
+  }
+  if (customPath.endsWith(".db")) {
+    return customPath.replace(/\.db$/, `_${env}.db`);
+  }
+  return customPath;
+}
+
 // Detecção inteligente de Docker Secrets ou variáveis locais
 const defaultCertSecretPath = "/run/secrets/cert_pfx";
 const detectedCertPath = fs.existsSync(defaultCertSecretPath)
@@ -63,10 +80,11 @@ export const config: AppConfig = {
   certPassword: detectedCertPassword,
   certBase64: process.env.CERT_BASE64 || "",
   enableMock: process.env.ENABLE_MOCK === "true",
+  enableUi: process.env.ENABLE_UI !== "false",
   dbClient,
   databaseUrl: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/nfse_db",
   pgPoolSize: Number(process.env.PG_POOL_SIZE) || 10,
-  dbPath: process.env.DB_PATH || path.resolve(process.cwd(), "data", "nfse.db"),
+  dbPath: resolveSqlitePath(process.env.DB_PATH, adnEnv),
   
   apiToken: detectedApiToken,
   rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60000, // 1 minuto

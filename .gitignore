@@ -24,6 +24,10 @@ data/
 
 # Build e arquivos compilados
 dist/
+dist-standalone/
+release-*/
+*.exe
+nfse-api*
 
 # Logs e arquivos de depuração
 *.log

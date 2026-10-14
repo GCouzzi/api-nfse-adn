@@ -26,6 +26,7 @@ services:
       - CERT_PATH=${CERT_PATH:-}
       - CERT_BASE64=${CERT_BASE64:-}
       - ENABLE_MOCK=${ENABLE_MOCK:-true}
+      - ENABLE_UI=${ENABLE_UI:-true}
     volumes:
       - sqlite_data:/app/data
     deploy:

@@ -15,6 +15,13 @@ A API conta com documentação completa disponível em múltiplos formatos:
 - **Guia Completo em Markdown**: Disponível em [docs/API.md](docs/API.md) com exemplos de cURL, tabelas de parâmetros e payloads JSON detalhados.
 - **Especificação OpenAPI 3.0 (JSON)**: Disponível em [docs/openapi.json](docs/openapi.json) ou no endpoint `GET /docs/openapi.json` para importar diretamente no Postman, Insomnia ou Swagger Editor.
 
+## 🖥️ Painel Web
+
+Frontend em HTML/CSS/JS puros (pasta [public/](public)) para sincronizar, listar notas e baixar XMLs/ZIPs:
+👉 **`http://localhost:4000/app/`**
+
+Se a API usa `API_TOKEN`, informe-o no botão **API Token** do painel (fica salvo apenas no navegador).
+
 ---
 
 ## 🚀 Principais Recursos
@@ -157,6 +164,26 @@ cp .env.example .env
 # 3. Rodar
 bun run dev    # Desenvolvimento com hot-reload
 bun run start  # Produção
+
+---
+
+## 📦 Gerar Executável Standalone (.exe ou Linux)
+
+O runtime Bun permite compilar todo o código TypeScript, dependências e motor SQLite em um **único binário executável**, sem precisar de Bun, Node.js ou Docker instalados na máquina de destino:
+
+```bash
+# Gerar executável para Windows (.exe):
+bun run build:exe
+
+# Gerar executável binário para Linux (x64):
+bun run build:linux
+```
+
+Ao executar o `nfse-api.exe` ou `nfse-api-linux`, basta manter na mesma pasta:
+- O arquivo `.env`
+- A pasta `certs/` (com seu certificado `.pfx`)
+- A pasta `public/` (se quiser acessar o painel web em `/app`)
+- A pasta `docs/` (se quiser a documentação OpenAPI em `/docs`)
 ```
 
 ---

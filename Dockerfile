@@ -32,6 +32,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./
 COPY src ./src
 COPY docs ./docs
+COPY public ./public
 
 # Garante que a aplicação execute com usuário não-privilegiado (segurança)
 RUN chown -R bun:bun /app

@@ -88,6 +88,11 @@ app.get("/docs", (req, res) => {
 </html>`);
 });
 
+// Painel web (frontend estático em HTML/CSS/JS puros). Ativado se ENABLE_UI != false
+if (config.enableUi) {
+  app.use("/app", express.static(path.resolve(process.cwd(), "public")));
+}
+
 // Rotas da API protegidas por autenticação via API Token
 app.use("/api", authMiddleware, apiRoutes);
 
@@ -112,11 +117,12 @@ async function bootstrap() {
     const server = app.listen(config.port, () => {
       console.log(`=======================================================`);
       console.log(`🚀 API NFS-e ADN iniciada na porta ${config.port}`);
-      console.log(`🗄️  Banco de Dados: ${config.dbClient.toUpperCase()}`);
+      console.log(`🗄️  Banco de Dados: ${config.dbClient.toUpperCase()} (${config.dbClient === "sqlite" ? config.dbPath : config.databaseUrl})`);
       console.log(`📡 Ambiente ADN: ${config.adnEnv.toUpperCase()} (${config.adnBaseUrl})`);
       console.log(`🔒 Modo Mock: ${config.enableMock ? "ATIVADO (simulação)" : "DESATIVADO (mTLS real)"}`);
       console.log(`🔑 Autenticação: ${config.apiToken ? "ATIVADA (Token obrigatório)" : "DESATIVADA (Modo aberto/Dev)"}`);
       console.log(`📖 Documentação Interativa: http://localhost:${config.port}/docs`);
+      console.log(`🖥️  Painel Web: ${config.enableUi ? `http://localhost:${config.port}/app/` : "DESATIVADO (ENABLE_UI=false)"}`);
       console.log(`🌐 Base URL: http://localhost:${config.port}`);
       console.log(`=======================================================`);
     });

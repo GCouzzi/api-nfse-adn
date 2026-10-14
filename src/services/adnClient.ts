@@ -93,10 +93,22 @@ export class AdnClient {
       return response.data;
     } catch (error: any) {
       if (error.response) {
-        console.error(`[AdnClient] Erro HTTP ${error.response.status} do ADN:`, error.response.data);
-        const errMsg = typeof error.response.data === "string" 
-          ? error.response.data 
-          : JSON.stringify(error.response.data);
+        // O ADN da Receita Federal retorna HTTP 404 com código E2220 quando não há mais documentos a partir do NSU consultado.
+        // Isso é o comportamento oficial e esperado de término de lote (Nenhum documento adicional localizado).
+        const data = error.response.data;
+        if (
+          error.response.status === 404 &&
+          (data?.StatusProcessamento === "NENHUM_DOCUMENTO_LOCALIZADO" ||
+           data?.Erros?.some((e: any) => e.Codigo === "E2220"))
+        ) {
+          console.log(`[AdnClient] Fim do lote alcançado no NSU ${params.nsu}: Nenhum documento adicional localizado no ADN.`);
+          return data;
+        }
+
+        console.error(`[AdnClient] Erro HTTP ${error.response.status} do ADN:`, data);
+        const errMsg = typeof data === "string" 
+          ? data 
+          : JSON.stringify(data);
         throw new Error(`Erro HTTP ${error.response.status} retornado pelo ADN: ${errMsg}`);
       }
       throw new Error(`Falha na comunicação com o ADN (${config.adnBaseUrl}): ${error.message}`);

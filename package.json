@@ -6,7 +6,9 @@
   "scripts": {
     "start": "bun run src/server.ts",
     "dev": "bun --watch src/server.ts",
-    "build": "bun build src/server.ts --outdir ./dist --target bun"
+    "build": "bun build src/server.ts --outdir ./dist --target bun",
+    "build:exe": "bun build --compile --minify src/server.ts --outfile nfse-api.exe",
+    "build:linux": "bun build --compile --minify --target=bun-linux-x64 src/server.ts --outfile nfse-api-linux"
   },
   "keywords": ["nfse", "adn", "nsu", "sped", "mtls", "bun"],
   "author": "",
