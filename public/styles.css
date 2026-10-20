@@ -796,6 +796,11 @@ td.num {
   margin-top: 2px;
   font-size: 11.5px;
 }
+.doc-item .row-actions {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 80px;
+  flex-shrink: 0;
+}
 
 dialog {
   border: 1px solid var(--border);
