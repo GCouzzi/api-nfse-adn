@@ -1,7 +1,14 @@
 # Arquivos de ambiente e segredos locais (CRÍTICO: nunca comitar!)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+secrets/
+.ssh/
+.aws/
+id_rsa
+id_ecdsa
+id_ed25519
+admin-password*.hash
 
 # Dependências
 node_modules/
@@ -14,6 +21,10 @@ certs/*
 *.pem
 *.key
 *.crt
+*.cer
+*.der
+*.jks
+*.keystore
 
 # Banco de dados SQLite local
 data/
@@ -21,6 +32,32 @@ data/
 *.db-journal
 *.db-wal
 *.db-shm
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Exportações, backups e arquivos temporários locais
+backups/
+exports/
+tmp/
+temp/
+*.dump
+*.backup
+*.sql.gz
+*.sql.zip
+*.bak
+*.old
+NFSe_*.xml
+Evento_*.xml
+DANFSe_*.pdf
+NFSe_completa_*.zip
+Pacote_XMLs_*.zip
+PDFs_*.zip
 
 # Build e arquivos compilados
 dist/

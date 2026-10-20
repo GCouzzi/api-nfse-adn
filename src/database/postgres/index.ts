@@ -1,4 +1,7 @@
+import { notaFilters, notaOrder } from "../notaFilters";
+import { postgresNotaFilterDialect } from "../dialects/postgresNotaFilterDialect";
 import { Pool } from "pg";
+import { SqlApplicationRepository } from "../sqlApplicationRepository";
 import { config } from "../../config/env";
 import type { IDatabaseRepository, FindAllByCnpjOptions } from "../types";
 import type {
@@ -7,22 +10,47 @@ import type {
   DocumentoXml,
   NotaFiscalComEventos,
   SyncControle,
-  SyncJob
+  SyncJob,
 } from "../../types/models";
 
-export class PostgresRepository implements IDatabaseRepository {
-  private pool: Pool;
+export interface PostgresConnection {
+  query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;
+  release(): void;
+}
 
-  constructor() {
-    this.pool = new Pool({
-      connectionString: config.databaseUrl,
-      max: config.pgPoolSize,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000
-    });
+export interface PostgresPool {
+  query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;
+  connect(): Promise<PostgresConnection>;
+  end(): Promise<void>;
+  on(event: "error", listener: (error: Error) => void): unknown;
+}
+
+export class PostgresRepository implements IDatabaseRepository {
+  private pool: PostgresPool;
+  application: SqlApplicationRepository;
+
+  constructor(pool?: PostgresPool) {
+    this.pool =
+      pool ??
+      new Pool({
+        connectionString: config.databaseUrl,
+        max: config.pgPoolSize,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 5000,
+      });
 
     this.pool.on("error", (err) => {
       console.error("[PostgresPool] Erro inesperado no cliente ocioso:", err);
+    });
+    this.application = new SqlApplicationRepository({
+      query: async <T>(
+        sql: string,
+        params: Array<string | number | null> = [],
+      ) => {
+        let position = 0;
+        const query = sql.replace(/\?/g, () => `$${++position}`);
+        return (await this.pool.query(query, params)).rows as T[];
+      },
     });
   }
 
@@ -117,32 +145,59 @@ export class PostgresRepository implements IDatabaseRepository {
       `);
 
       // Índices B-Tree compostos e parciais otimizados
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_notas_prestador_emissao ON notas_fiscais(cnpj_prestador, data_emissao DESC);`);
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_notas_tomador_emissao ON notas_fiscais(cnpj_tomador, data_emissao DESC) WHERE cnpj_tomador IS NOT NULL;`);
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_notas_cpf_tomador ON notas_fiscais(cpf_tomador) WHERE cpf_tomador IS NOT NULL;`);
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_notas_chave ON notas_fiscais(chave_acesso);`);
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_notas_nsu ON notas_fiscais(nsu);`);
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_docs_chave ON documentos_xml(chave_acesso);`);
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_docs_nsu ON documentos_xml(nsu);`);
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_eventos_chave ON eventos_nfse(chave_acesso);`);
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_jobs_cnpj ON sync_jobs(cnpj);`);
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_jobs_status ON sync_jobs(status);`);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_notas_prestador_emissao ON notas_fiscais(cnpj_prestador, data_emissao DESC);`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_notas_tomador_emissao ON notas_fiscais(cnpj_tomador, data_emissao DESC) WHERE cnpj_tomador IS NOT NULL;`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_notas_cpf_tomador ON notas_fiscais(cpf_tomador) WHERE cpf_tomador IS NOT NULL;`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_notas_chave ON notas_fiscais(chave_acesso);`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_notas_nsu ON notas_fiscais(nsu);`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_docs_chave ON documentos_xml(chave_acesso);`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_docs_nsu ON documentos_xml(nsu);`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_eventos_chave ON eventos_nfse(chave_acesso);`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_jobs_cnpj ON sync_jobs(cnpj);`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_jobs_status ON sync_jobs(status);`,
+      );
+
+      await client.query(
+        "CREATE INDEX IF NOT EXISTS idx_notas_competencia ON notas_fiscais(competencia);",
+      );
 
       await client.query("COMMIT");
-      console.log("[PostgresRepository] Banco PostgreSQL e índices otimizados inicializados com sucesso.");
+      console.log(
+        "[PostgresRepository] Banco PostgreSQL e índices otimizados inicializados com sucesso.",
+      );
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
     }
+    await this.application.init(config.adnEnv);
   }
 
   async getSyncControle(cnpj: string): Promise<SyncControle> {
     const cleanCnpj = cnpj.replace(/\D/g, "");
     const res = await this.pool.query<SyncControle>(
       "SELECT * FROM sync_controle WHERE cnpj = $1",
-      [cleanCnpj]
+      [cleanCnpj],
     );
 
     if (res.rows.length > 0) {
@@ -155,30 +210,38 @@ export class PostgresRepository implements IDatabaseRepository {
       max_nsu: 0,
       ultima_sincronizacao: null,
       status: "IDLE",
-      mensagem_erro: null
+      mensagem_erro: null,
     };
 
     await this.pool.query(
       `INSERT INTO sync_controle (cnpj, ultimo_nsu, max_nsu, ultima_sincronizacao, status, mensagem_erro)
        VALUES ($1, 0, 0, NULL, 'IDLE', NULL)
        ON CONFLICT (cnpj) DO NOTHING`,
-      [cleanCnpj]
+      [cleanCnpj],
     );
 
     return novo;
   }
 
-  async setSyncStatus(cnpj: string, status: "IDLE" | "SYNCING" | "ERROR" | "SUCCESS", errorMsg?: string | null): Promise<void> {
+  async setSyncStatus(
+    cnpj: string,
+    status: "IDLE" | "SYNCING" | "ERROR" | "SUCCESS",
+    errorMsg?: string | null,
+  ): Promise<void> {
     const cleanCnpj = cnpj.replace(/\D/g, "");
     await this.pool.query(
       `UPDATE sync_controle 
        SET status = $1, mensagem_erro = $2 
        WHERE cnpj = $3`,
-      [status, errorMsg || null, cleanCnpj]
+      [status, errorMsg || null, cleanCnpj],
     );
   }
 
-  async updateSyncProgress(cnpj: string, ultimoNsu: number, maxNsu: number): Promise<void> {
+  async updateSyncProgress(
+    cnpj: string,
+    ultimoNsu: number,
+    maxNsu: number,
+  ): Promise<void> {
     const cleanCnpj = cnpj.replace(/\D/g, "");
     await this.pool.query(
       `UPDATE sync_controle 
@@ -188,7 +251,7 @@ export class PostgresRepository implements IDatabaseRepository {
            status = 'SUCCESS', 
            mensagem_erro = NULL 
        WHERE cnpj = $3`,
-      [ultimoNsu, maxNsu, cleanCnpj]
+      [ultimoNsu, maxNsu, cleanCnpj],
     );
   }
 
@@ -198,13 +261,16 @@ export class PostgresRepository implements IDatabaseRepository {
       `INSERT INTO sync_jobs (cnpj, status, nsu_inicial, created_at)
        VALUES ($1, 'QUEUED', $2, NOW())
        RETURNING *`,
-      [cleanCnpj, nsuInicial ?? null]
+      [cleanCnpj, nsuInicial ?? null],
     );
     return res.rows[0];
   }
 
   async getSyncJob(id: number): Promise<SyncJob | null> {
-    const res = await this.pool.query<SyncJob>("SELECT * FROM sync_jobs WHERE id = $1", [id]);
+    const res = await this.pool.query<SyncJob>(
+      "SELECT * FROM sync_jobs WHERE id = $1",
+      [id],
+    );
     return res.rows.length > 0 ? res.rows[0] : null;
   }
 
@@ -213,11 +279,14 @@ export class PostgresRepository implements IDatabaseRepository {
       const cleanCnpj = cnpj.replace(/\D/g, "");
       const res = await this.pool.query<SyncJob>(
         "SELECT * FROM sync_jobs WHERE cnpj = $1 ORDER BY id DESC LIMIT $2",
-        [cleanCnpj, limit]
+        [cleanCnpj, limit],
       );
       return res.rows;
     }
-    const res = await this.pool.query<SyncJob>("SELECT * FROM sync_jobs ORDER BY id DESC LIMIT $1", [limit]);
+    const res = await this.pool.query<SyncJob>(
+      "SELECT * FROM sync_jobs ORDER BY id DESC LIMIT $1",
+      [limit],
+    );
     return res.rows;
   }
 
@@ -234,7 +303,10 @@ export class PostgresRepository implements IDatabaseRepository {
     if (fields.length === 0) return;
 
     values.push(id);
-    await this.pool.query(`UPDATE sync_jobs SET ${fields.join(", ")} WHERE id = $${idx}`, values);
+    await this.pool.query(
+      `UPDATE sync_jobs SET ${fields.join(", ")} WHERE id = $${idx}`,
+      values,
+    );
   }
 
   async getActiveSyncJobByCnpj(cnpj: string): Promise<SyncJob | null> {
@@ -243,7 +315,7 @@ export class PostgresRepository implements IDatabaseRepository {
       `SELECT * FROM sync_jobs 
        WHERE cnpj = $1 AND status IN ('QUEUED', 'PROCESSING') 
        ORDER BY id DESC LIMIT 1`,
-      [cleanCnpj]
+      [cleanCnpj],
     );
     return res.rows.length > 0 ? res.rows[0] : null;
   }
@@ -260,8 +332,8 @@ export class PostgresRepository implements IDatabaseRepository {
         doc.tipo_documento,
         doc.tipo_evento || null,
         doc.xml_conteudo,
-        doc.data_hora_geracao || null
-      ]
+        doc.data_hora_geracao || null,
+      ],
     );
     return Number(res.rows[0].id);
   }
@@ -276,6 +348,17 @@ export class PostgresRepository implements IDatabaseRepository {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
       ON CONFLICT (chave_acesso) DO UPDATE SET
         nsu = EXCLUDED.nsu,
+        cnpj_prestador = COALESCE(EXCLUDED.cnpj_prestador, notas_fiscais.cnpj_prestador),
+        cnpj_tomador = COALESCE(EXCLUDED.cnpj_tomador, notas_fiscais.cnpj_tomador),
+        cpf_tomador = COALESCE(EXCLUDED.cpf_tomador, notas_fiscais.cpf_tomador),
+        razao_social_prestador = COALESCE(EXCLUDED.razao_social_prestador, notas_fiscais.razao_social_prestador),
+        razao_social_tomador = COALESCE(EXCLUDED.razao_social_tomador, notas_fiscais.razao_social_tomador),
+        numero_nfse = COALESCE(EXCLUDED.numero_nfse, notas_fiscais.numero_nfse),
+        serie = COALESCE(EXCLUDED.serie, notas_fiscais.serie),
+        data_emissao = COALESCE(EXCLUDED.data_emissao, notas_fiscais.data_emissao),
+        competencia = COALESCE(EXCLUDED.competencia, notas_fiscais.competencia),
+        descricao_servico = COALESCE(EXCLUDED.descricao_servico, notas_fiscais.descricao_servico),
+        codigo_municipio = COALESCE(EXCLUDED.codigo_municipio, notas_fiscais.codigo_municipio),
         valor_servicos = CASE WHEN EXCLUDED.valor_servicos > 0 THEN EXCLUDED.valor_servicos ELSE notas_fiscais.valor_servicos END,
         valor_liquido = CASE WHEN EXCLUDED.valor_liquido > 0 THEN EXCLUDED.valor_liquido ELSE notas_fiscais.valor_liquido END,
         updated_at = NOW()`,
@@ -295,8 +378,8 @@ export class PostgresRepository implements IDatabaseRepository {
         nota.valor_liquido,
         nota.descricao_servico || null,
         nota.codigo_municipio || null,
-        nota.status || "AUTORIZADA"
-      ]
+        nota.status || "AUTORIZADA",
+      ],
     );
   }
 
@@ -312,48 +395,25 @@ export class PostgresRepository implements IDatabaseRepository {
         evento.descricao_evento || null,
         evento.motivo || null,
         evento.data_hora_evento || null,
-        evento.documento_xml_id || null
-      ]
+        evento.documento_xml_id || null,
+      ],
     );
   }
 
   async updateNotaStatus(chaveAcesso: string, status: string): Promise<void> {
     await this.pool.query(
       "UPDATE notas_fiscais SET status = $1, updated_at = NOW() WHERE chave_acesso = $2",
-      [status, chaveAcesso]
+      [status, chaveAcesso],
     );
   }
 
-  async findAllByCnpj(cnpj: string, options: FindAllByCnpjOptions = {}): Promise<NotaFiscalComEventos[]> {
-    const cleanCnpj = cnpj.replace(/\D/g, "");
-    const papel = options.papel || "todos";
-    const limit = options.limit || 100;
-    const offset = options.offset || 0;
-
-    const conditions: string[] = [];
-    const params: any[] = [];
-    let pIdx = 1;
-
-    if (papel === "prestador") {
-      conditions.push(`n.cnpj_prestador = $${pIdx++}`);
-      params.push(cleanCnpj);
-    } else if (papel === "tomador") {
-      conditions.push(`(n.cnpj_tomador = $${pIdx} OR n.cpf_tomador = $${pIdx++})`);
-      params.push(cleanCnpj);
-    } else {
-      conditions.push(`(n.cnpj_prestador = $${pIdx} OR n.cnpj_tomador = $${pIdx} OR n.cpf_tomador = $${pIdx++})`);
-      params.push(cleanCnpj);
-    }
-
-    if (options.status) {
-      conditions.push(`n.status = $${pIdx++}`);
-      params.push(options.status.toUpperCase());
-    }
-
-    params.push(limit);
-    const limitIdx = pIdx++;
-    params.push(offset);
-    const offsetIdx = pIdx++;
+  async findAllByCnpj(
+    cnpj: string,
+    options: FindAllByCnpjOptions = {},
+  ): Promise<NotaFiscalComEventos[]> {
+    const filters = notaFilters(cnpj, options, postgresNotaFilterDialect);
+    const limitParam = filters.bind(options.limit ?? 100);
+    const offsetParam = filters.bind(options.offset ?? 0);
 
     const sql = `
       SELECT
@@ -410,12 +470,15 @@ export class PostgresRepository implements IDatabaseRepository {
           ), '[]'::json
         ) AS documentos
       FROM notas_fiscais n
-      WHERE ${conditions.join(" AND ")}
-      ORDER BY n.data_emissao DESC, n.nsu DESC
-      LIMIT $${limitIdx} OFFSET $${offsetIdx};
+      WHERE ${filters.where}
+      ORDER BY ${notaOrder}
+      LIMIT ${limitParam} OFFSET ${offsetParam};
     `;
 
-    const res = await this.pool.query<NotaFiscalComEventos>(sql, params);
+    const res = await this.pool.query<NotaFiscalComEventos>(
+      sql,
+      filters.params,
+    );
     return res.rows;
   }
 
@@ -485,13 +548,16 @@ export class PostgresRepository implements IDatabaseRepository {
     return res.rows.length > 0 ? res.rows[0] : null;
   }
 
-  async getXmlByChave(chaveAcesso: string, tipoDocumento = "NFSE"): Promise<string | null> {
+  async getXmlByChave(
+    chaveAcesso: string,
+    tipoDocumento = "NFSE",
+  ): Promise<string | null> {
     const cleanChave = chaveAcesso.replace(/\D/g, "");
     const res = await this.pool.query<{ xml_conteudo: string }>(
       `SELECT xml_conteudo FROM documentos_xml 
        WHERE chave_acesso = $1 AND tipo_documento = $2 
        ORDER BY id DESC LIMIT 1`,
-      [cleanChave, tipoDocumento]
+      [cleanChave, tipoDocumento],
     );
     return res.rows.length > 0 ? res.rows[0].xml_conteudo : null;
   }
@@ -499,7 +565,7 @@ export class PostgresRepository implements IDatabaseRepository {
   async getXmlById(id: number): Promise<DocumentoXml | null> {
     const res = await this.pool.query<DocumentoXml>(
       "SELECT * FROM documentos_xml WHERE id = $1",
-      [id]
+      [id],
     );
     return res.rows.length > 0 ? res.rows[0] : null;
   }
@@ -508,21 +574,32 @@ export class PostgresRepository implements IDatabaseRepository {
     const cleanChave = chaveAcesso.replace(/\D/g, "");
     const res = await this.pool.query<DocumentoXml>(
       "SELECT * FROM documentos_xml WHERE chave_acesso = $1 ORDER BY id ASC",
-      [cleanChave]
+      [cleanChave],
     );
     return res.rows;
   }
 
-  async getXmlsForCnpj(cnpj: string): Promise<Array<{ chave_acesso: string; tipo_documento: string; tipo_evento?: string | null; xml_conteudo: string }>> {
-    const cleanCnpj = cnpj.replace(/\D/g, "");
+  async getXmlsForCnpj(
+    cnpj: string,
+    options: FindAllByCnpjOptions = {},
+  ): Promise<
+    Array<{
+      id: number;
+      chave_acesso: string;
+      tipo_documento: string;
+      tipo_evento?: string | null;
+      xml_conteudo: string;
+    }>
+  > {
+    const filters = notaFilters(cnpj, options, postgresNotaFilterDialect);
     const sql = `
-      SELECT d.chave_acesso, d.tipo_documento, d.tipo_evento, d.xml_conteudo
+      SELECT d.id, d.chave_acesso, d.tipo_documento, d.tipo_evento, d.xml_conteudo
       FROM documentos_xml d
       INNER JOIN notas_fiscais n ON n.chave_acesso = d.chave_acesso
-      WHERE n.cnpj_prestador = $1 OR n.cnpj_tomador = $1 OR n.cpf_tomador = $1
+      WHERE ${filters.where}
       ORDER BY d.id ASC
     `;
-    const res = await this.pool.query(sql, [cleanCnpj]);
+    const res = await this.pool.query(sql, filters.params);
     return res.rows;
   }
 

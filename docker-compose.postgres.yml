@@ -27,7 +27,11 @@ services:
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-nfse_db}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-nfse_db}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -43,6 +47,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        INSTALL_CHROMIUM: ${INSTALL_CHROMIUM:-false}
     container_name: nfse-api-postgres
     restart: unless-stopped
     depends_on:
@@ -59,6 +65,9 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nfse_db}
       - PG_POOL_SIZE=${PG_POOL_SIZE:-20}
       - API_TOKEN=${API_TOKEN:-}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - APP_ORIGIN=${APP_ORIGIN:-}
       - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-60000}
       - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-100}
       - ADN_REQUEST_DELAY_MS=${ADN_REQUEST_DELAY_MS:-500}
@@ -71,11 +80,22 @@ services:
       - CERT_BASE64=${CERT_BASE64:-}
       - ENABLE_MOCK=${ENABLE_MOCK:-true}
       - ENABLE_UI=${ENABLE_UI:-true}
+      - CERTIFICATES_DIR=/app/certs
+      - CERT_ENCRYPTION_KEY=${CERT_ENCRYPTION_KEY:-}
+      - PDF_RENDERER=${PDF_RENDERER:-gotenberg}
+      - GOTENBERG_URL=${GOTENBERG_URL:-}
+      - GOTENBERG_USERNAME=${GOTENBERG_USERNAME:-}
+      - GOTENBERG_PASSWORD=${GOTENBERG_PASSWORD:-}
+      - CHROMIUM_EXECUTABLE_PATH=${CHROMIUM_EXECUTABLE_PATH:-/usr/bin/chromium-browser}
+      - PDF_TIMEOUT_MS=${PDF_TIMEOUT_MS:-60000}
+      - PDF_EXPORT_TTL_MS=${PDF_EXPORT_TTL_MS:-3600000}
+    volumes:
+      - ${CERTIFICATES_HOST_DIR:-./certs}:/app/certs:rw
     deploy:
       resources:
         limits:
           cpus: "1.0"
-          memory: 512M
+          memory: ${API_MEMORY_LIMIT:-512M}
         reservations:
           memory: 128M
 

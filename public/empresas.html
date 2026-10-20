@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Empresas e certificados · NFS-e Nacional</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div>
+          <h1>Empresas e certificados</h1>
+          <p>NFS-e Nacional · Painel ADN</p>
+        </div>
+      </div>
+      <div class="actions">
+        <a class="btn btn-ghost" href="./">Consultar notas</a>
+        <button class="btn btn-ghost" type="button" data-auth>Sair</button>
+      </div>
+    </header>
+    <main class="container company-page">
+      <p
+        id="pageError"
+        class="form-error"
+        role="alert"
+        tabindex="-1"
+        hidden
+      ></p>
+      <section class="card management-card">
+        <h2>Empresas cadastradas</h2>
+        <p>
+          Selecione uma empresa para editar. A desativação mantém suas notas e
+          seu histórico disponíveis para consulta.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Empresa / CNPJ</th>
+                <th>Certificado</th>
+                <th>Situação</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="companyRows">
+              <tr>
+                <td colspan="4">Carregando empresas…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section class="card management-card">
+        <h2 id="companyFormTitle">Cadastrar empresa</h2>
+        <form id="companyForm" class="management-fields">
+          <div class="field grow">
+            <label for="companyName">Nome da empresa</label
+            ><input
+              id="companyName"
+              required
+              maxlength="200"
+              autocomplete="organization"
+            />
+          </div>
+          <div class="field">
+            <label for="companyCnpj">CNPJ</label
+            ><input
+              id="companyCnpj"
+              required
+              inputmode="numeric"
+              minlength="14"
+              maxlength="18"
+              placeholder="00.000.000/0000-00"
+            />
+          </div>
+          <div class="field grow">
+            <label for="companyCertificate">Certificado utilizado</label
+            ><select id="companyCertificate">
+              <option value="">Sem certificado</option></select
+            ><small>É possível cadastrar a empresa antes do certificado.</small>
+          </div>
+          <div class="field">
+            <label for="companyActive">Situação</label
+            ><select id="companyActive">
+              <option value="true">Ativa</option>
+              <option value="false">Inativa</option>
+            </select>
+          </div>
+          <p
+            id="companyError"
+            class="form-error full"
+            role="alert"
+            tabindex="-1"
+            hidden
+          ></p>
+          <div class="actions full">
+            <button class="btn btn-primary" id="companySave" type="submit">
+              Salvar empresa</button
+            ><button class="btn btn-ghost" id="companyReset" type="button">
+              Novo cadastro
+            </button>
+          </div>
+        </form>
+        <p id="companyFeedback" role="status"></p>
+      </section>
+      <section class="card management-card">
+        <h2>Certificados disponíveis</h2>
+        <p>
+          Envie um certificado A1 (.pfx ou .p12) ou selecione um arquivo já
+          disponível no servidor. Informe a senha para validar o certificado e
+          depois vincule-o à empresa.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Titular / Arquivo</th>
+                <th>Validade</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="certificateRows">
+              <tr>
+                <td colspan="3">Carregando certificados…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <form id="certificateForm" class="management-fields">
+          <div class="field full">
+            <label for="certificateSource">Origem do certificado</label>
+            <select id="certificateSource">
+              <option value="upload">Enviar arquivo deste computador</option>
+              <option value="existing">
+                Usar arquivo já disponível no servidor
+              </option>
+            </select>
+          </div>
+          <div class="field grow" id="certificateUploadField">
+            <label for="certificateUpload">Certificado A1</label>
+            <input
+              id="certificateUpload"
+              type="file"
+              accept=".pfx,.p12"
+              required
+              aria-describedby="uploadHelp"
+            />
+            <small id="uploadHelp"
+              >Arquivo .pfx ou .p12 de até 10 MB. O certificado será validado
+              antes de ser salvo no servidor.</small
+            >
+          </div>
+          <div class="field grow" id="certificateExistingField" hidden>
+            <label for="certificateFile">Arquivo na pasta</label
+            ><select id="certificateFile" disabled>
+              <option value="">Selecione um arquivo</option></select
+            ><small id="fileHelp"
+              >A lista mostra somente arquivos da pasta autorizada.</small
+            >
+          </div>
+          <div class="field grow">
+            <label for="certificatePassword">Senha do certificado</label
+            ><input
+              id="certificatePassword"
+              type="password"
+              autocomplete="new-password"
+              maxlength="1000"
+            /><small
+              >A senha é armazenada com criptografia e não será exibida.</small
+            >
+          </div>
+          <p
+            id="certificateError"
+            class="form-error full"
+            role="alert"
+            tabindex="-1"
+            hidden
+          ></p>
+          <div class="actions full">
+            <button class="btn btn-primary" id="certificateSave" type="submit">
+              Validar e cadastrar certificado</button
+            ><button class="btn btn-ghost" id="certificateReset" type="button">
+              Novo certificado</button
+            ><button class="btn btn-ghost" id="reloadFiles" type="button">
+              Atualizar arquivos da pasta
+            </button>
+          </div>
+        </form>
+        <p id="certificateFeedback" role="status"></p>
+      </section>
+    </main>
+    <script src="api.js"></script>
+    <script src="empresas.js"></script>
+  </body>
+</html>

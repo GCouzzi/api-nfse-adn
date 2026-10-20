@@ -6,7 +6,7 @@ const parser = new XMLParser({
   attributeNamePrefix: "@_",
   parseTagValue: false,
   trimValues: true,
-  removeNSPrefix: true
+  removeNSPrefix: true,
 });
 
 export interface ParsedNfseData {
@@ -77,17 +77,21 @@ function findNode(obj: any, keyName: string): any {
 /**
  * Extrai dados estruturados de um XML de NFS-e Nacional
  */
-export function parseNfseXml(xmlString: string, chaveFallback?: string): ParsedNfseData {
+export function parseNfseXml(
+  xmlString: string,
+  chaveFallback?: string,
+): ParsedNfseData {
   const result: ParsedNfseData = {
     chave_acesso: chaveFallback,
     valor_servicos: 0,
-    valor_liquido: 0
+    valor_liquido: 0,
   };
 
   try {
     const parsed = parser.parse(xmlString);
 
-    const infNFSe = findNode(parsed, "infNFSe") || findNode(parsed, "infDPS") || parsed;
+    const infNFSe =
+      findNode(parsed, "infNFSe") || findNode(parsed, "infDPS") || parsed;
 
     // Chave de Acesso
     if (infNFSe?.["@_Id"]) {
@@ -97,19 +101,34 @@ export function parseNfseXml(xmlString: string, chaveFallback?: string): ParsedN
     }
 
     // Número da NFS-e
-    result.numero_nfse = infNFSe?.nNFSe || infNFSe?.nDPS || findNode(parsed, "nNFSe") || findNode(parsed, "nDPS");
+    result.numero_nfse =
+      infNFSe?.nNFSe ||
+      infNFSe?.nDPS ||
+      findNode(parsed, "nNFSe") ||
+      findNode(parsed, "nDPS");
     if (result.numero_nfse) result.numero_nfse = String(result.numero_nfse);
 
     // Série
-    result.serie = infNFSe?.sNFSe || infNFSe?.serie || findNode(parsed, "sNFSe") || findNode(parsed, "serie");
+    result.serie =
+      infNFSe?.sNFSe ||
+      infNFSe?.serie ||
+      findNode(parsed, "sNFSe") ||
+      findNode(parsed, "serie");
     if (result.serie) result.serie = String(result.serie);
 
     // Datas
-    result.data_emissao = infNFSe?.dhProc || infNFSe?.dhEmi || findNode(parsed, "dhProc") || findNode(parsed, "dhEmi");
+    result.data_emissao =
+      infNFSe?.dhProc ||
+      infNFSe?.dhEmi ||
+      findNode(parsed, "dhProc") ||
+      findNode(parsed, "dhEmi");
     result.competencia = infNFSe?.dCompet || findNode(parsed, "dCompet");
 
     // Prestador / Emitente
-    const emit = findNode(parsed, "emit") || findNode(parsed, "prest") || findNode(parsed, "prestador");
+    const emit =
+      findNode(parsed, "emit") ||
+      findNode(parsed, "prest") ||
+      findNode(parsed, "prestador");
     if (emit) {
       result.cnpj_prestador = emit.CNPJ || emit.CPF;
       result.razao_social_prestador = emit.xNome || emit.xFant;
@@ -124,18 +143,32 @@ export function parseNfseXml(xmlString: string, chaveFallback?: string): ParsedN
     }
 
     // Valores
-    const valores = findNode(parsed, "valores") || findNode(parsed, "valr");
-    if (valores) {
-      const vServ = valores.vServ || valores.vNFSe || valores.vServPrest || 0;
-      const vLiq = valores.vLiq || valores.vLiquido || vServ;
-      result.valor_servicos = parseFloat(String(vServ)) || 0;
-      result.valor_liquido = parseFloat(String(vLiq)) || result.valor_servicos;
-    }
+    const dps = findNode(infNFSe, "infDPS") || infNFSe;
+    const valores =
+      dps.valores || findNode(dps, "valores") || findNode(parsed, "valr");
+    const numeric = (value: unknown) => Number.parseFloat(String(value ?? ""));
+    const vServ = numeric(
+      valores?.vServPrest?.vServ ??
+        valores?.vServ ??
+        valores?.vNFSe ??
+        findNode(parsed, "vServ"),
+    );
+    const vLiq = numeric(
+      infNFSe?.valores?.vLiq ??
+        valores?.vLiq ??
+        valores?.vLiquido ??
+        findNode(parsed, "vLiq"),
+    );
+    result.valor_servicos = Number.isFinite(vServ) ? vServ : 0;
+    result.valor_liquido = Number.isFinite(vLiq) ? vLiq : result.valor_servicos;
 
     // Descrição do Serviço
     const serv = findNode(parsed, "serv") || findNode(parsed, "servico");
     if (serv) {
-      result.descricao_servico = serv.xDescServ || serv.xServ || (typeof serv === "string" ? serv : undefined);
+      result.descricao_servico =
+        serv.xDescServ ||
+        serv.xServ ||
+        (typeof serv === "string" ? serv : undefined);
       result.codigo_municipio = serv.cMunEmi || serv.cMun;
     }
     if (!result.descricao_servico) {
@@ -151,20 +184,27 @@ export function parseNfseXml(xmlString: string, chaveFallback?: string): ParsedN
 /**
  * Extrai dados estruturados de um XML de Evento (ex: Cancelamento)
  */
-export function parseEventoXml(xmlString: string, chaveFallback?: string): ParsedEventoData {
+export function parseEventoXml(
+  xmlString: string,
+  chaveFallback?: string,
+): ParsedEventoData {
   const result: ParsedEventoData = {
-    chave_acesso: chaveFallback
+    chave_acesso: chaveFallback,
   };
 
   try {
     const parsed = parser.parse(xmlString);
-    const infEvento = findNode(parsed, "infEvento") || findNode(parsed, "evento") || parsed;
+    const infEvento =
+      findNode(parsed, "infEvento") || findNode(parsed, "evento") || parsed;
 
-    result.chave_acesso = infEvento?.chNFSe || infEvento?.chaveAcesso || chaveFallback;
+    result.chave_acesso =
+      infEvento?.chNFSe || infEvento?.chaveAcesso || chaveFallback;
     result.tipo_evento = infEvento?.tpEvento || infEvento?.tipoEvento;
     result.descricao_evento = infEvento?.descEvento || infEvento?.xDesc;
-    result.motivo = infEvento?.xMotivo || infEvento?.xJust || infEvento?.xCorrecao;
-    result.data_hora_evento = infEvento?.dhEvento || infEvento?.dhRegEvento || infEvento?.dhProc;
+    result.motivo =
+      infEvento?.xMotivo || infEvento?.xJust || infEvento?.xCorrecao;
+    result.data_hora_evento =
+      infEvento?.dhEvento || infEvento?.dhRegEvento || infEvento?.dhProc;
   } catch (error) {
     console.error("Erro ao fazer parse do XML de Evento:", error);
   }

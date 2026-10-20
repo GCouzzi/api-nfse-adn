@@ -15,12 +15,14 @@ RUN bun install --production --frozen-lockfile || bun install --production
 # ==========================================
 FROM oven/bun:alpine AS runner
 WORKDIR /app
+ARG INSTALL_CHROMIUM=false
 
 ENV NODE_ENV=production \
     PORT=4000
 
 # Adiciona utilitário curl leve para o HEALTHCHECK do Docker
 RUN apk add --no-cache curl
+RUN if [ "$INSTALL_CHROMIUM" = "true" ]; then apk add --no-cache chromium font-noto; fi
 
 # Cria as pastas de persistência de dados e certificados
 RUN mkdir -p /app/data /app/certs

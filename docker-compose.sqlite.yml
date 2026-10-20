@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        INSTALL_CHROMIUM: ${INSTALL_CHROMIUM:-false}
     container_name: nfse-api-sqlite
     restart: unless-stopped
     ports:
@@ -15,6 +17,9 @@ services:
       - DB_CLIENT=sqlite
       - DB_PATH=/app/data/nfse.db
       - API_TOKEN=${API_TOKEN:-}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - APP_ORIGIN=${APP_ORIGIN:-}
       - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-60000}
       - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-100}
       - ADN_REQUEST_DELAY_MS=${ADN_REQUEST_DELAY_MS:-500}
@@ -27,13 +32,23 @@ services:
       - CERT_BASE64=${CERT_BASE64:-}
       - ENABLE_MOCK=${ENABLE_MOCK:-true}
       - ENABLE_UI=${ENABLE_UI:-true}
+      - CERTIFICATES_DIR=/app/certs
+      - CERT_ENCRYPTION_KEY=${CERT_ENCRYPTION_KEY:-}
+      - PDF_RENDERER=${PDF_RENDERER:-gotenberg}
+      - GOTENBERG_URL=${GOTENBERG_URL:-}
+      - GOTENBERG_USERNAME=${GOTENBERG_USERNAME:-}
+      - GOTENBERG_PASSWORD=${GOTENBERG_PASSWORD:-}
+      - CHROMIUM_EXECUTABLE_PATH=${CHROMIUM_EXECUTABLE_PATH:-/usr/bin/chromium-browser}
+      - PDF_TIMEOUT_MS=${PDF_TIMEOUT_MS:-60000}
+      - PDF_EXPORT_TTL_MS=${PDF_EXPORT_TTL_MS:-3600000}
     volumes:
       - sqlite_data:/app/data
+      - ${CERTIFICATES_HOST_DIR:-./certs}:/app/certs:rw
     deploy:
       resources:
         limits:
           cpus: "1.0"
-          memory: 256M
+          memory: ${API_MEMORY_LIMIT:-512M}
         reservations:
           memory: 64M
 

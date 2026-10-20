@@ -71,11 +71,21 @@ export function initSchema(db: Database): void {
   `);
 
   // Índices para otimização de busca rápida por CNPJ, Chave de Acesso e NSU
-  db.run(`CREATE INDEX IF NOT EXISTS idx_notas_cnpj_prestador ON notas_fiscais(cnpj_prestador);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_notas_cnpj_tomador ON notas_fiscais(cnpj_tomador);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_notas_chave ON notas_fiscais(chave_acesso);`);
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_notas_cnpj_prestador ON notas_fiscais(cnpj_prestador);`,
+  );
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_notas_cnpj_tomador ON notas_fiscais(cnpj_tomador);`,
+  );
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_notas_chave ON notas_fiscais(chave_acesso);`,
+  );
   db.run(`CREATE INDEX IF NOT EXISTS idx_notas_nsu ON notas_fiscais(nsu);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_docs_chave ON documentos_xml(chave_acesso);`);
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_docs_chave ON documentos_xml(chave_acesso);`,
+  );
   db.run(`CREATE INDEX IF NOT EXISTS idx_docs_nsu ON documentos_xml(nsu);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_eventos_chave ON eventos_nfse(chave_acesso);`);
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_eventos_chave ON eventos_nfse(chave_acesso);`,
+  );
 }

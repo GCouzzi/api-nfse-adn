@@ -7,9 +7,22 @@ export class NotaService {
   /**
    * Retorna todas as notas fiscais de um CNPJ com seus respectivos eventos e metadados de XMLs
    */
-  async findAllByCnpj(cnpj: string, options: FindAllByCnpjOptions = {}): Promise<NotaFiscalComEventos[]> {
+  async findAllByCnpj(
+    cnpj: string,
+    options: FindAllByCnpjOptions = {},
+  ): Promise<NotaFiscalComEventos[]> {
     const cleanCnpj = cnpj.replace(/\D/g, "");
-    return repository.findAllByCnpj(cleanCnpj, options);
+    const notes = await repository.findAllByCnpj(cleanCnpj, options);
+    if (!options.empresaId || !options.ambiente) return notes;
+    const nsus = await repository.application.noteNsus(
+      options.empresaId,
+      options.ambiente,
+      notes.map((note) => note.chave_acesso),
+    );
+    return notes.map((note) => ({
+      ...note,
+      nsu: nsus.get(note.chave_acesso) ?? note.nsu,
+    }));
   }
 
   /**
@@ -23,7 +36,10 @@ export class NotaService {
   /**
    * Obtém o XML da NFS-e principal ou evento pela chave de acesso
    */
-  async getXmlByChave(chaveAcesso: string, tipoDocumento = "NFSE"): Promise<string | null> {
+  async getXmlByChave(
+    chaveAcesso: string,
+    tipoDocumento = "NFSE",
+  ): Promise<string | null> {
     const cleanChave = chaveAcesso.replace(/\D/g, "");
     return repository.getXmlByChave(cleanChave, tipoDocumento);
   }
@@ -43,7 +59,9 @@ export class NotaService {
     const docs = await repository.getXmlsForChave(cleanChave);
 
     if (docs.length === 0) {
-      throw new Error(`Nenhum documento XML localizado para a chave: ${chaveAcesso}`);
+      throw new Error(
+        `Nenhum documento XML localizado para a chave: ${chaveAcesso}`,
+      );
     }
 
     const zip = new AdmZip();
@@ -63,9 +81,12 @@ export class NotaService {
   /**
    * Cria um arquivo ZIP contendo todos os XMLs de notas e eventos de um CNPJ
    */
-  async generateZipForCnpj(cnpj: string): Promise<Buffer> {
+  async generateZipForCnpj(
+    cnpj: string,
+    options: FindAllByCnpjOptions = {},
+  ): Promise<Buffer> {
     const cleanCnpj = cnpj.replace(/\D/g, "");
-    const docs = await repository.getXmlsForCnpj(cleanCnpj);
+    const docs = await repository.getXmlsForCnpj(cleanCnpj, options);
 
     if (docs.length === 0) {
       throw new Error(`Nenhum documento XML encontrado para o CNPJ: ${cnpj}`);
@@ -78,7 +99,7 @@ export class NotaService {
       const fileName =
         doc.tipo_documento === "NFSE"
           ? `${folder}/NFSe_${doc.chave_acesso}.xml`
-          : `${folder}/Evento_${doc.tipo_evento || doc.tipo_documento}_${doc.chave_acesso}.xml`;
+          : `${folder}/Evento_${doc.tipo_evento || doc.tipo_documento}_${doc.chave_acesso}_${doc.id}.xml`;
 
       zip.addFile(fileName, Buffer.from(doc.xml_conteudo, "utf-8"));
     }

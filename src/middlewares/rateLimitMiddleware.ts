@@ -9,6 +9,7 @@ export const apiRateLimiter = rateLimit({
   skip: (req) => req.path === "/health" || req.path === "/",
   message: {
     success: false,
-    error: "Muitas requisições recebidas. Limite de taxa excedido. Tente novamente mais tarde."
-  }
+    error:
+      "Muitas requisições recebidas. Limite de taxa excedido. Tente novamente mais tarde.",
+  },
 });

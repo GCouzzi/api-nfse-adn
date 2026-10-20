@@ -7,9 +7,16 @@ import { initDatabase, repository } from "./database";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { apiRateLimiter } from "./middlewares/rateLimitMiddleware";
 import apiRoutes from "./routes";
+import { ApplicationError } from "./application/contracts";
+import { pdfExports, pdfRenderer } from "./main/services";
+import { syncQueueService } from "./services/syncQueueService";
+import { createAuthRoutes } from "./routes/authRoutes";
+import { adminAuth } from "./security/authInstance";
 
 const app = express();
 
+app.disable("x-powered-by");
+app.use("/auth", createAuthRoutes(adminAuth, config));
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
@@ -26,10 +33,10 @@ app.get("/", (req, res) => {
     environment: config.adnEnv,
     adnBaseUrl: config.adnBaseUrl,
     mockMode: config.enableMock,
-    authRequired: Boolean(config.apiToken),
+    authRequired: true,
     rateLimit: {
       windowMs: config.rateLimitWindowMs,
-      maxRequests: config.rateLimitMax
+      maxRequests: config.rateLimitMax,
     },
     outboundThrottlingMs: config.adnRequestDelayMs,
     endpoints: {
@@ -45,8 +52,8 @@ app.get("/", (req, res) => {
       downloadXmlNota: "GET /api/notas/:chaveAcesso/xml",
       downloadZipNotaComEventos: "GET /api/notas/:chaveAcesso/zip",
       downloadZipTodasNotasCnpj: "GET /api/notas/cnpj/:cnpj/zip",
-      downloadXmlDocumentoPorId: "GET /api/notas/documento/:id/xml"
-    }
+      downloadXmlDocumentoPorId: "GET /api/notas/documento/:id/xml",
+    },
   });
 });
 
@@ -56,7 +63,7 @@ app.get("/health", (req, res) => {
     status: "UP",
     database: config.dbClient,
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
   });
 });
 
@@ -67,7 +74,9 @@ app.get("/docs/openapi.json", (req, res) => {
     res.setHeader("Content-Type", "application/json");
     res.sendFile(specPath);
   } else {
-    res.status(404).json({ success: false, error: "Arquivo openapi.json não encontrado." });
+    res
+      .status(404)
+      .json({ success: false, error: "Arquivo openapi.json não encontrado." });
   }
 });
 
@@ -93,36 +102,77 @@ if (config.enableUi) {
   app.use("/app", express.static(path.resolve(process.cwd(), "public")));
 }
 
-// Rotas da API protegidas por autenticação via API Token
+// Sessão do painel ou token explícito de integração.
 app.use("/api", authMiddleware, apiRoutes);
 
 // Tratamento de rota não encontrada
 app.use((req, res) => {
-  res.status(404).json({ success: false, error: `Rota não encontrada: ${req.method} ${req.path}` });
-});
-
-// Tratamento global de erros
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error("Erro interno não tratado:", err);
-  res.status(500).json({
+  res.status(404).json({
     success: false,
-    error: err.message || "Erro interno do servidor"
+    error: `Rota não encontrada: ${req.method} ${req.path}`,
   });
 });
 
+// Tratamento global de erros
+app.use(
+  (
+    err: any,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+  ) => {
+    console.error("Erro interno não tratado:", err);
+    res.status(err instanceof ApplicationError ? err.status : 500).json({
+      success: false,
+      error:
+        err instanceof ApplicationError
+          ? err.message
+          : "Erro interno do servidor",
+    });
+  },
+);
+
 async function bootstrap() {
   try {
+    if (config.sessionSecure && config.adminUsername) {
+      const origin = new URL(config.appOrigin);
+      if (origin.protocol !== "https:" || origin.origin !== config.appOrigin) {
+        throw new Error(
+          "APP_ORIGIN deve conter a origem HTTPS do painel, sem caminho ou barra final.",
+        );
+      }
+    }
+    if (!config.adminUsername || !config.adminPassword) {
+      console.warn(
+        "Login do painel indisponível: configure ADMIN_USERNAME e ADMIN_PASSWORD. A API permanece protegida.",
+      );
+    }
+    await adminAuth.init();
     await initDatabase();
+    await syncQueueService.init();
+    await pdfExports.init();
 
     const server = app.listen(config.port, () => {
       console.log(`=======================================================`);
       console.log(`🚀 API NFS-e ADN iniciada na porta ${config.port}`);
-      console.log(`🗄️  Banco de Dados: ${config.dbClient.toUpperCase()} (${config.dbClient === "sqlite" ? config.dbPath : config.databaseUrl})`);
-      console.log(`📡 Ambiente ADN: ${config.adnEnv.toUpperCase()} (${config.adnBaseUrl})`);
-      console.log(`🔒 Modo Mock: ${config.enableMock ? "ATIVADO (simulação)" : "DESATIVADO (mTLS real)"}`);
-      console.log(`🔑 Autenticação: ${config.apiToken ? "ATIVADA (Token obrigatório)" : "DESATIVADA (Modo aberto/Dev)"}`);
-      console.log(`📖 Documentação Interativa: http://localhost:${config.port}/docs`);
-      console.log(`🖥️  Painel Web: ${config.enableUi ? `http://localhost:${config.port}/app/` : "DESATIVADO (ENABLE_UI=false)"}`);
+      console.log(
+        `🗄️  Banco de Dados: ${config.dbClient.toUpperCase()}${config.dbClient === "sqlite" ? ` (${config.dbPath})` : ""}`,
+      );
+      console.log(
+        `📡 Ambiente ADN: ${config.adnEnv.toUpperCase()} (${config.adnBaseUrl})`,
+      );
+      console.log(
+        `🔒 Modo Mock: ${config.enableMock ? "ATIVADO (simulação)" : "DESATIVADO (mTLS real)"}`,
+      );
+      console.log(
+        `🔑 Autenticação: sessão do administrador${config.apiToken ? " e API Token para integrações" : ""}`,
+      );
+      console.log(
+        `📖 Documentação Interativa: http://localhost:${config.port}/docs`,
+      );
+      console.log(
+        `🖥️  Painel Web: ${config.enableUi ? `http://localhost:${config.port}/app/` : "DESATIVADO (ENABLE_UI=false)"}`,
+      );
       console.log(`🌐 Base URL: http://localhost:${config.port}`);
       console.log(`=======================================================`);
     });
@@ -130,6 +180,9 @@ async function bootstrap() {
     const shutdown = async (signal: string) => {
       console.log(`Recebido sinal ${signal}. Encerrando aplicação...`);
       server.close(async () => {
+        await syncQueueService.close();
+        await pdfExports.close();
+        await pdfRenderer.close();
         await repository.close();
         console.log("Servidor e conexões de banco encerrados com segurança.");
         process.exit(0);

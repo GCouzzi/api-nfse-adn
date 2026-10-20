@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
-import { syncService } from "../services/syncService";
+import { syncService, companies } from "../main/services";
+import { ApplicationError } from "../application/contracts";
 import { syncQueueService } from "../services/syncQueueService";
 
 export class SyncController {
@@ -13,22 +14,26 @@ export class SyncController {
       const isAsync = req.body.async !== false && req.query.sync !== "true";
 
       if (!cnpj) {
-        res.status(400).json({ success: false, error: "O campo 'cnpj' é obrigatório no corpo da requisição." });
+        res.status(400).json({
+          success: false,
+          error: "O campo 'cnpj' é obrigatório no corpo da requisição.",
+        });
         return;
       }
+      await companies.byCnpj(String(cnpj), true);
 
       // Modo Assíncrono (Padrão): Enfileira na fila com Mutex Lock e responde 202 imediatamente
       if (isAsync) {
         const queueResult = await syncQueueService.queueSync(String(cnpj), {
           nsuInicial: nsuInicial !== undefined ? Number(nsuInicial) : undefined,
-          maxLoops: maxLoops !== undefined ? Number(maxLoops) : 10
+          maxLoops: maxLoops !== undefined ? Number(maxLoops) : 10,
         });
 
         if (queueResult.alreadyRunning) {
           res.status(409).json({
             success: false,
             message: "Já existe uma sincronização em andamento para este CNPJ.",
-            data: queueResult.job
+            data: queueResult.job,
           });
           return;
         }
@@ -36,36 +41,55 @@ export class SyncController {
         res.status(202).json({
           success: true,
           message: "Sincronização enfileirada com sucesso em segundo plano.",
-          data: queueResult.job
+          data: queueResult.job,
         });
         return;
       }
 
-      // Modo Síncrono (caso solicitado explicitamente via async: false ou ?sync=true)
-      if (syncQueueService.isSyncing(String(cnpj))) {
+      // Both modes share the queue and the same per-company exclusion.
+      const submitted = await syncQueueService.queueSync(String(cnpj), {
+        nsuInicial: nsuInicial === undefined ? undefined : Number(nsuInicial),
+        maxLoops: maxLoops === undefined ? 10 : Number(maxLoops),
+      });
+      if (submitted.alreadyRunning) {
         res.status(409).json({
           success: false,
-          error: "Já existe uma sincronização em andamento para este CNPJ."
+          error: "Já existe uma sincronização em andamento para este CNPJ.",
         });
         return;
       }
 
-      const result = await syncService.sincronizarCnpj(
-        String(cnpj),
-        nsuInicial !== undefined ? Number(nsuInicial) : undefined,
-        maxLoops !== undefined ? Number(maxLoops) : 10
-      );
+      let completed = submitted.job;
+      while (["QUEUED", "PROCESSING"].includes(completed.status)) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        completed = (await syncQueueService.getJob(completed.id))!;
+      }
+      if (completed.status === "FAILED")
+        throw new ApplicationError(
+          completed.erro || "A sincronização falhou.",
+          502,
+        );
+      const result = {
+        cnpj: completed.cnpj,
+        nsuInicial: completed.nsu_inicial,
+        nsuFinal: completed.nsu_final,
+        novosDocumentos: completed.novos_documentos,
+        totalNotas: completed.total_notas,
+        totalEventos: completed.total_eventos,
+        ciclosExecutados: completed.ciclos_executados,
+      };
 
       res.status(200).json({
         success: true,
         message: "Sincronização concluída com sucesso.",
-        data: result
+        data: result,
       });
     } catch (error: any) {
       console.error("Erro na sincronização:", error);
-      res.status(500).json({
+      res.status(error instanceof ApplicationError ? error.status : 500).json({
         success: false,
-        error: error.message || "Erro interno ao processar sincronização com o ADN."
+        error:
+          error.message || "Erro interno ao processar sincronização com o ADN.",
       });
     }
   }
@@ -80,13 +104,16 @@ export class SyncController {
       const job = await syncQueueService.getJob(id);
 
       if (!job) {
-        res.status(404).json({ success: false, error: "Job de sincronização não encontrado." });
+        res.status(404).json({
+          success: false,
+          error: "Job de sincronização não encontrado.",
+        });
         return;
       }
 
       res.status(200).json({
         success: true,
-        data: job
+        data: job,
       });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
@@ -106,7 +133,7 @@ export class SyncController {
       res.status(200).json({
         success: true,
         total: jobs.length,
-        data: jobs
+        data: jobs,
       });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
@@ -121,7 +148,9 @@ export class SyncController {
     try {
       const { cnpj } = req.params;
       if (!cnpj) {
-        res.status(400).json({ success: false, error: "O parâmetro 'cnpj' é obrigatório." });
+        res
+          .status(400)
+          .json({ success: false, error: "O parâmetro 'cnpj' é obrigatório." });
         return;
       }
 
@@ -132,8 +161,8 @@ export class SyncController {
         success: true,
         data: {
           ...status,
-          emExecucao: isSyncing
-        }
+          emExecucao: isSyncing,
+        },
       });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });

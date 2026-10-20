@@ -1,5 +1,6 @@
 import repository from "../database";
-import { syncService, type SyncResult } from "./syncService";
+import { companies, syncService } from "../main/services";
+import { ApplicationError } from "../application/contracts";
 import type { SyncJob } from "../types/models";
 
 export interface QueueJobResult {
@@ -9,153 +10,136 @@ export interface QueueJobResult {
 }
 
 export class SyncQueueService {
-  // Mutex Lock em memória por CNPJ para evitar sincronizações concorrentes no mesmo processo
-  private activeLocks: Set<string> = new Set();
-  private queue: Array<{ jobId: number; cnpj: string; nsuInicial?: number; maxLoops?: number }> = [];
-  private isProcessing = false;
+  private readonly pending = new Map<string, Promise<QueueJobResult>>();
+  private readonly active = new Set<string>();
+  private readonly queue: Array<{
+    job: SyncJob;
+    nsuInicial?: number;
+    maxLoops?: number;
+  }> = [];
+  private worker?: Promise<void>;
+  private stopping = false;
 
-  constructor() {
-    this.recoverInterruptedJobs();
-  }
-
-  /**
-   * Recupera jobs que estavam em processamento caso o servidor tenha sido reiniciado
-   */
-  private async recoverInterruptedJobs(): Promise<void> {
-    try {
-      const pendingJobs = await repository.listSyncJobs(undefined, 50);
-      for (const job of pendingJobs) {
-        if (job.status === "PROCESSING") {
-          // Marca como FAILED por interrupção de servidor para permitir novo disparo
-          await repository.updateSyncJob(job.id, {
-            status: "FAILED",
-            erro: "Processo interrompido por reinicialização do servidor.",
-            finished_at: new Date().toISOString()
-          });
-        }
+  async init(): Promise<void> {
+    for (const job of await repository.listSyncJobs(undefined, 100000)) {
+      if (["QUEUED", "PROCESSING"].includes(job.status)) {
+        await repository.updateSyncJob(job.id, {
+          status: "FAILED",
+          erro: "Sincronização interrompida pela reinicialização. Solicite uma nova execução.",
+          finished_at: new Date().toISOString(),
+        });
       }
-    } catch {
-      // Ignora erro inicial se tabelas ainda não estiverem prontas
     }
   }
 
-  /**
-   * Enfileira uma solicitação de sincronização com Mutex Lock por CNPJ
-   */
-  async queueSync(cnpj: string, options?: { nsuInicial?: number; maxLoops?: number }): Promise<QueueJobResult> {
+  async queueSync(
+    cnpj: string,
+    options: { nsuInicial?: number; maxLoops?: number } = {},
+  ): Promise<QueueJobResult> {
     const cleanCnpj = cnpj.replace(/\D/g, "");
-
-    // 1. Verifica Lock em memória e no banco
-    if (this.activeLocks.has(cleanCnpj)) {
-      const activeJob = await repository.getActiveSyncJobByCnpj(cleanCnpj);
-      if (activeJob) {
-        return { job: activeJob, isNew: false, alreadyRunning: true };
-      }
-    }
-
-    const dbActiveJob = await repository.getActiveSyncJobByCnpj(cleanCnpj);
-    if (dbActiveJob) {
-      this.activeLocks.add(cleanCnpj);
-      return { job: dbActiveJob, isNew: false, alreadyRunning: true };
-    }
-
-    // 2. Adquire o Lock para este CNPJ
-    this.activeLocks.add(cleanCnpj);
-
-    // 3. Cria registro persistente do Job no banco
-    const job = await repository.createSyncJob(cleanCnpj, options?.nsuInicial);
-
-    // 4. Adiciona à fila de processamento em background
-    this.queue.push({
-      jobId: job.id,
-      cnpj: cleanCnpj,
-      nsuInicial: options?.nsuInicial,
-      maxLoops: options?.maxLoops
-    });
-
-    // 5. Aciona o loop do worker em background (sem bloquear o HTTP)
-    setTimeout(() => this.processNext(), 0);
-
-    return { job, isNew: true, alreadyRunning: false };
-  }
-
-  /**
-   * Worker que consome a fila em background
-   */
-  private async processNext(): Promise<void> {
-    if (this.isProcessing || this.queue.length === 0) {
-      return;
-    }
-
-    this.isProcessing = true;
-    const task = this.queue.shift();
-
-    if (!task) {
-      this.isProcessing = false;
-      return;
-    }
-
-    const { jobId, cnpj, nsuInicial, maxLoops } = task;
-
+    if (this.stopping)
+      throw new ApplicationError("Aplicação em encerramento.", 503);
+    if (
+      options.nsuInicial !== undefined &&
+      (!Number.isSafeInteger(options.nsuInicial) || options.nsuInicial < 0)
+    )
+      throw new ApplicationError("NSU inicial inválido.");
+    if (
+      options.maxLoops !== undefined &&
+      (!Number.isSafeInteger(options.maxLoops) ||
+        options.maxLoops < 1 ||
+        options.maxLoops > 10000)
+    )
+      throw new ApplicationError("maxLoops deve estar entre 1 e 10000.");
+    const pending = this.pending.get(cleanCnpj);
+    if (pending)
+      return { ...(await pending), alreadyRunning: true, isNew: false };
+    const submission = this.submit(cleanCnpj, options);
+    this.pending.set(cleanCnpj, submission);
     try {
-      // Atualiza job para PROCESSING
-      await repository.updateSyncJob(jobId, {
-        status: "PROCESSING",
-        started_at: new Date().toISOString()
-      });
-
-      // Executa a sincronização real no ADN
-      const result: SyncResult = await syncService.sincronizarCnpj(cnpj, nsuInicial, maxLoops);
-
-      // Atualiza job com resultado de sucesso
-      await repository.updateSyncJob(jobId, {
-        status: "COMPLETED",
-        nsu_final: result.nsuFinal,
-        novos_documentos: result.novosDocumentos,
-        total_notas: result.totalNotas,
-        total_eventos: result.totalEventos,
-        ciclos_executados: result.ciclosExecutados,
-        finished_at: new Date().toISOString()
-      });
-    } catch (error: any) {
-      console.error(`[SyncQueue] Falha no Job #${jobId} (CNPJ: ${cnpj}):`, error.message);
-      await repository.updateSyncJob(jobId, {
-        status: "FAILED",
-        erro: error.message || "Erro desconhecido",
-        finished_at: new Date().toISOString()
-      });
+      return await submission;
     } finally {
-      // Libera o Mutex Lock para este CNPJ
-      this.activeLocks.delete(cnpj);
-      this.isProcessing = false;
+      this.pending.delete(cleanCnpj);
+    }
+  }
 
-      // Se houver mais jobs na fila, continua
-      if (this.queue.length > 0) {
-        setTimeout(() => this.processNext(), 50);
+  private async submit(
+    cnpj: string,
+    options: { nsuInicial?: number; maxLoops?: number },
+  ): Promise<QueueJobResult> {
+    await companies.byCnpj(cnpj, true);
+    const activeJob = await repository.getActiveSyncJobByCnpj(cnpj);
+    if (activeJob)
+      return { job: activeJob, alreadyRunning: true, isNew: false };
+    const job = await repository.createSyncJob(cnpj, options.nsuInicial);
+    this.active.add(cnpj);
+    this.queue.push({ job, ...options });
+    this.start();
+    return { job, alreadyRunning: false, isNew: true };
+  }
+
+  private start(): void {
+    if (this.worker || this.stopping) return;
+    this.worker = this.work().finally(() => {
+      this.worker = undefined;
+      if (this.queue.length && !this.stopping) this.start();
+    });
+  }
+
+  private async work(): Promise<void> {
+    while (this.queue.length && !this.stopping) {
+      const { job, nsuInicial, maxLoops } = this.queue.shift()!;
+      try {
+        await repository.updateSyncJob(job.id, {
+          status: "PROCESSING",
+          started_at: new Date().toISOString(),
+        });
+        const result = await syncService.sincronizarCnpj(
+          job.cnpj,
+          nsuInicial,
+          maxLoops,
+        );
+        await repository.updateSyncJob(job.id, {
+          status: "COMPLETED",
+          nsu_final: result.nsuFinal,
+          novos_documentos: result.novosDocumentos,
+          total_notas: result.totalNotas,
+          total_eventos: result.totalEventos,
+          ciclos_executados: result.ciclosExecutados,
+          finished_at: new Date().toISOString(),
+        });
+      } catch (error) {
+        await repository.updateSyncJob(job.id, {
+          status: "FAILED",
+          erro:
+            error instanceof Error ? error.message : "Falha na sincronização.",
+          finished_at: new Date().toISOString(),
+        });
+      } finally {
+        this.active.delete(job.cnpj);
       }
     }
   }
 
-  /**
-   * Consulta o status de um Job específico
-   */
-  async getJob(id: number): Promise<SyncJob | null> {
+  getJob(id: number) {
     return repository.getSyncJob(id);
   }
-
-  /**
-   * Lista jobs recentes
-   */
-  async listJobs(cnpj?: string, limit?: number): Promise<SyncJob[]> {
+  listJobs(cnpj?: string, limit?: number) {
     return repository.listSyncJobs(cnpj, limit);
   }
+  isSyncing(cnpj: string) {
+    return this.active.has(cnpj.replace(/\D/g, ""));
+  }
 
-  /**
-   * Verifica se há sincronização ativa para o CNPJ
-   */
-  isSyncing(cnpj: string): boolean {
-    const cleanCnpj = cnpj.replace(/\D/g, "");
-    return this.activeLocks.has(cleanCnpj);
+  async close(): Promise<void> {
+    this.stopping = true;
+    await this.worker;
+    for (const { job } of this.queue.splice(0))
+      await repository.updateSyncJob(job.id, {
+        status: "FAILED",
+        erro: "Aplicação encerrada antes do processamento.",
+        finished_at: new Date().toISOString(),
+      });
   }
 }
 
