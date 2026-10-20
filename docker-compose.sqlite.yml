@@ -9,8 +9,6 @@ services:
     restart: unless-stopped
     ports:
       - "${PORT:-4000}:4000"
-    secrets:
-      - cert_pfx
     environment:
       - NODE_ENV=production
       - PORT=4000
@@ -51,10 +49,6 @@ services:
           memory: ${API_MEMORY_LIMIT:-512M}
         reservations:
           memory: 64M
-
-secrets:
-  cert_pfx:
-    file: ${CERT_PATH:-./certs/certificado.pfx}
 
 volumes:
   sqlite_data:

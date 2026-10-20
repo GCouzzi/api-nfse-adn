@@ -47,7 +47,9 @@ CERTIFICATES_HOST_DIR=/opt/nfse/certs
 
 O usuário `bun` do contêiner precisa ter permissão de escrita no diretório montado. O volume deve ser persistente para manter os uploads entre recriações do contêiner.
 
-`CERT_PATH` e o Docker Secret `cert_pfx` continuam atendendo ao certificado previamente configurado. O caminho `/run/secrets/cert_pfx` é um arquivo somente leitura, não um destino de upload. A aplicação salva novos arquivos em `CERTIFICATES_DIR`, sem modificar Docker Secrets. A pasta dos certificados, o banco e a chave de criptografia devem fazer parte do backup da aplicação.
+Os dois Compose podem iniciar sem certificado inicial. Para múltiplas empresas, cada certificado e sua senha são cadastrados pelo painel; `CERT_PATH` e `CERT_PASSWORD` podem ficar ausentes do ambiente.
+
+A aplicação continua reconhecendo `CERT_PATH` e o Docker Secret `cert_pfx` em deployments que os disponibilizem explicitamente. Os Compose fornecidos não exigem essa montagem. O caminho `/run/secrets/cert_pfx` é somente leitura, não um destino de upload. A aplicação salva novos arquivos em `CERTIFICATES_DIR`, sem modificar Docker Secrets. A pasta dos certificados, o banco e a chave de criptografia devem fazer parte do backup da aplicação.
 
 ## Renderizador de PDF
 

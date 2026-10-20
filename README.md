@@ -97,6 +97,8 @@ CERT_PASSWORD=senha_do_certificado
 
 Em produção, altere `ADN_ENV=producao`. Também é possível informar o certificado em Base64 por meio de `CERT_BASE64`.
 
+`CERT_PATH`, `CERT_PASSWORD` e `CERT_BASE64` atendem ao certificado legado e são opcionais para o cadastro de múltiplas empresas. Nesse fluxo, envie ou selecione cada certificado no painel e informe sua própria senha.
+
 O certificado e sua senha não devem ser versionados. A pasta `certs/` e os arquivos de certificado estão ignorados pelo Git.
 
 Cadastre a empresa e valide seu certificado em `/app/empresas.html`. As sincronizações utilizam o certificado vinculado à empresa; o arquivo legado configurado acima também aparece na lista como `certificado-configurado.pfx`. Configure `CERT_ENCRYPTION_KEY` ou seu arquivo de segredo para salvar senhas. A ausência de certificado válido com `ENABLE_MOCK=false` causa erro e não ativa respostas simuladas.
@@ -131,7 +133,7 @@ O projeto mantém dois arquivos Compose independentes. Ambos executam a API e o 
 | `docker-compose.sqlite.yml`   | API                 | Volume `nfse_sqlite_data` |
 | `docker-compose.postgres.yml` | API e PostgreSQL 17 | Volume `nfse_pg_data`     |
 
-Antes de iniciar qualquer stack, disponibilize o certificado no caminho definido por `CERT_PATH`. O padrão é `./certs/certificado.pfx`. O arquivo é montado no contêiner como Docker Secret.
+Os dois Compose permitem iniciar a aplicação sem um certificado previamente disponível. Configure `CERT_ENCRYPTION_KEY` e uma pasta persistente gravável por `CERTIFICATES_HOST_DIR` (padrão: `./certs`), montada em `/app/certs`. Depois, envie e vincule os certificados pelo painel. Não há montagem obrigatória de um certificado fixo.
 
 Para o login, configure `ADMIN_USERNAME`, `ADMIN_PASSWORD` e `APP_ORIGIN=https://notas.seudominio.com` no ambiente. Os dois Compose repassam essas variáveis à aplicação. Publique o serviço por HTTPS. Para desenvolvimento local com Bun, use o fluxo descrito acima.
 

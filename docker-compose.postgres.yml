@@ -56,8 +56,6 @@ services:
         condition: service_healthy
     ports:
       - "${PORT:-4000}:4000"
-    secrets:
-      - cert_pfx
     environment:
       - NODE_ENV=production
       - PORT=4000
@@ -98,10 +96,6 @@ services:
           memory: ${API_MEMORY_LIMIT:-512M}
         reservations:
           memory: 128M
-
-secrets:
-  cert_pfx:
-    file: ${CERT_PATH:-./certs/certificado.pfx}
 
 volumes:
   pg_data:
