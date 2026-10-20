@@ -24,6 +24,9 @@ export class SqlApplicationRepository implements ApplicationRepository {
         ativa INTEGER NOT NULL DEFAULT 1, certificado_id TEXT REFERENCES certificados(id),
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
       )`,
+      `CREATE TABLE IF NOT EXISTS empresas_removidas (
+        empresa_id TEXT PRIMARY KEY REFERENCES empresas(id), removida_em TEXT NOT NULL
+      )`,
       `CREATE TABLE IF NOT EXISTS empresa_notas (
         empresa_id TEXT NOT NULL REFERENCES empresas(id), ambiente TEXT NOT NULL,
         chave_acesso TEXT NOT NULL, origem TEXT NOT NULL,
@@ -93,44 +96,84 @@ export class SqlApplicationRepository implements ApplicationRepository {
 
   listCompanies() {
     return this.sql.query<Company>(
-      "SELECT * FROM empresas ORDER BY nome, cnpj",
+      "SELECT e.* FROM empresas e WHERE NOT EXISTS (SELECT 1 FROM empresas_removidas r WHERE r.empresa_id = e.id) ORDER BY nome, cnpj",
     );
   }
 
   async getCompany(id: string) {
     return (
       (
-        await this.sql.query<Company>("SELECT * FROM empresas WHERE id = ?", [
-          id,
-        ])
+        await this.sql.query<Company>(
+          "SELECT e.* FROM empresas e WHERE e.id = ? AND NOT EXISTS (SELECT 1 FROM empresas_removidas r WHERE r.empresa_id = e.id)",
+          [id],
+        )
       )[0] ?? null
     );
   }
 
-  async getCompanyByCnpj(cnpj: string) {
+  async getCompanyByCnpj(cnpj: string, includeRemoved = false) {
     return (
       (
-        await this.sql.query<Company>("SELECT * FROM empresas WHERE cnpj = ?", [
-          cnpj,
-        ])
+        await this.sql.query<Company>(
+          `SELECT e.*, r.removida_em FROM empresas e LEFT JOIN empresas_removidas r ON r.empresa_id = e.id WHERE e.cnpj = ? ${includeRemoved ? "" : "AND r.empresa_id IS NULL"}`,
+          [cnpj],
+        )
       )[0] ?? null
     );
   }
 
   async saveCompany(company: Company) {
-    await this.sql.query(
-      `INSERT INTO empresas (id, nome, cnpj, ativa, certificado_id, created_at, updated_at)
+    await this.sql.atomic([
+      {
+        sql: `INSERT INTO empresas (id, nome, cnpj, ativa, certificado_id, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET
       nome = excluded.nome, ativa = excluded.ativa, certificado_id = excluded.certificado_id, updated_at = excluded.updated_at`,
-      [
-        company.id,
-        company.nome,
-        company.cnpj,
-        company.ativa,
-        company.certificado_id,
-        company.created_at,
-        company.updated_at,
-      ],
+        params: [
+          company.id,
+          company.nome,
+          company.cnpj,
+          company.ativa,
+          company.certificado_id,
+          company.created_at,
+          company.updated_at,
+        ],
+      },
+      {
+        sql: "DELETE FROM empresas_removidas WHERE empresa_id = ?",
+        params: [company.id],
+      },
+    ]);
+  }
+
+  async removeCompany(id: string) {
+    await this.sql.atomic([
+      {
+        sql: "INSERT INTO empresas_removidas (empresa_id, removida_em) VALUES (?, ?) ON CONFLICT (empresa_id) DO NOTHING",
+        params: [id, new Date().toISOString()],
+      },
+      {
+        sql: "UPDATE empresas SET certificado_id = NULL, updated_at = ? WHERE id = ?",
+        params: [new Date().toISOString(), id],
+      },
+    ]);
+  }
+
+  async removeCertificate(id: string) {
+    const rows = await this.sql.query<{ id: string }>(
+      "DELETE FROM certificados WHERE id = ? AND NOT EXISTS (SELECT 1 FROM empresas WHERE certificado_id = ?) RETURNING id",
+      [id, id],
+    );
+    return rows.length > 0;
+  }
+
+  async isCertificateFileRegistered(filename: string) {
+    return (
+      (
+        await this.sql.query(
+          "SELECT 1 FROM certificados WHERE arquivo = ? LIMIT 1",
+          [filename],
+        )
+      ).length > 0
     );
   }
 

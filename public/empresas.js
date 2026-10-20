@@ -42,7 +42,7 @@
         companies
           .map(
             (company) =>
-              `<tr><td><strong>${esc(company.nome)}</strong><br><small>${esc(company.cnpj)}</small></td><td>${esc(company.certificado?.titular || "Sem certificado")}<br><small>${esc(company.certificado?.arquivo || "")}</small></td><td>${company.ativa ? "Ativa" : "Inativa"}</td><td><button class="btn btn-ghost" type="button" data-company="${esc(company.id)}">Editar</button></td></tr>`,
+              `<tr><td data-label="Empresa / CNPJ"><strong>${esc(company.nome)}</strong><br><small>${esc(company.cnpj)}</small></td><td data-label="Certificado">${esc(company.certificado?.titular || "Sem certificado")}<br><small>${esc(company.certificado?.arquivo || "")}</small></td><td data-label="Situação">${company.ativa ? "Ativa" : "Inativa"}</td><td data-label="Ações"><div class="table-actions"><button class="btn btn-ghost" type="button" data-company="${esc(company.id)}">Editar</button><button class="btn btn-ghost btn-danger" type="button" data-remove-company="${esc(company.id)}">Remover</button></div></td></tr>`,
           )
           .join("") ||
         '<tr><td colspan="4">Nenhuma empresa cadastrada.</td></tr>';
@@ -50,7 +50,7 @@
         certificates
           .map(
             (certificate) =>
-              `<tr><td><strong>${esc(certificate.titular)}</strong><br><small>${esc(certificate.arquivo)}</small></td><td>${new Date(certificate.validade).toLocaleDateString("pt-BR")}${Date.parse(certificate.validade) <= Date.now() ? " · Vencido" : ""}</td><td><button class="btn btn-ghost" type="button" data-certificate="${esc(certificate.id)}">Substituir / revalidar</button></td></tr>`,
+              `<tr><td data-label="Titular / Arquivo"><strong>${esc(certificate.titular)}</strong><br><small>${esc(certificate.arquivo)}</small></td><td data-label="Validade">${new Date(certificate.validade).toLocaleDateString("pt-BR")}${Date.parse(certificate.validade) <= Date.now() ? " · Vencido" : ""}</td><td data-label="Ações"><div class="table-actions"><button class="btn btn-ghost" type="button" data-certificate="${esc(certificate.id)}">Revalidar</button><button class="btn btn-ghost btn-danger" type="button" data-remove-certificate="${esc(certificate.id)}">Remover</button></div></td></tr>`,
           )
           .join("") ||
         '<tr><td colspan="3">Nenhum certificado cadastrado.</td></tr>';
@@ -92,6 +92,7 @@
     companyId = null;
     $("companyForm").reset();
     $("companyCnpj").disabled = false;
+    validateCnpj(false);
     $("companyFormTitle").textContent = "Cadastrar empresa";
     showError("companyError", "");
   }
@@ -121,6 +122,10 @@
   });
   $("companyForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!validateCnpj()) {
+      $("companyCnpj").reportValidity();
+      return;
+    }
     $("companySave").disabled = true;
     $("companyFeedback").textContent = "Salvando empresa…";
     showError("companyError", "");
@@ -196,6 +201,7 @@
     $("companyName").value = company.nome;
     $("companyCnpj").value = company.cnpj;
     $("companyCnpj").disabled = true;
+    validateCnpj(false);
     $("companyActive").value = String(Boolean(company.ativa));
     $("companyCertificate").value = company.certificado_id || "";
     $("companyFormTitle").textContent = "Editar empresa";
@@ -214,21 +220,87 @@
     $("certificateSave").textContent = "Validar e atualizar certificado";
     $("certificateFile").focus();
   });
+  $("companyRows").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-remove-company]");
+    const company = companies.find(
+      (item) => item.id === button?.dataset.removeCompany,
+    );
+    if (
+      !company ||
+      !window.confirm(
+        `Remover "${company.nome}" da lista de empresas? As notas e o histórico serão preservados. Cadastrar o mesmo CNPJ novamente recupera esse histórico.`,
+      )
+    )
+      return;
+    button.disabled = true;
+    try {
+      await api(`/api/empresas/${company.id}`, { method: "DELETE" });
+      if (companyId === company.id) resetCompany();
+      await load();
+      $("companyFeedback").textContent =
+        "Empresa removida. As notas e o histórico foram preservados.";
+    } catch (error) {
+      showError("pageError", error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  $("certificateRows").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-remove-certificate]");
+    const certificate = certificates.find(
+      (item) => item.id === button?.dataset.removeCertificate,
+    );
+    if (!certificate) return;
+    if (
+      companies.some((company) => company.certificado_id === certificate.id)
+    ) {
+      showError(
+        "pageError",
+        "Desvincule o certificado das empresas antes de removê-lo.",
+      );
+      return;
+    }
+    if (
+      !window.confirm(
+        `Remover o certificado de "${certificate.titular}"? A senha cadastrada será apagada. Arquivos enviados pelo painel também serão apagados quando não houver outro cadastro usando o arquivo. Arquivos adicionados manualmente permanecem no servidor.`,
+      )
+    )
+      return;
+    button.disabled = true;
+    try {
+      const result = await api(`/api/certificados/${certificate.id}`, {
+        method: "DELETE",
+      });
+      if (certificateId === certificate.id) resetCertificate();
+      await Promise.all([load(), loadFiles()]);
+      $("certificateFeedback").textContent =
+        result?.aviso || "Certificado removido.";
+    } catch (error) {
+      showError("pageError", error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
   $("companyReset").addEventListener("click", resetCompany);
   $("certificateReset").addEventListener("click", resetCertificate);
   $("certificateSource").addEventListener("change", updateCertificateSource);
   $("reloadFiles").addEventListener("click", loadFiles);
-  $("companyCnpj").addEventListener("blur", () => {
+  function validateCnpj(show = true) {
     const field = $("companyCnpj");
-    field.setCustomValidity(
-      field.value && field.value.replace(/\D/g, "").length !== 14
-        ? "Informe um CNPJ com 14 dígitos."
-        : "",
-    );
-    if (!field.checkValidity()) field.reportValidity();
-  });
+    const invalid =
+      !field.disabled &&
+      !!field.value &&
+      field.value.replace(/\D/g, "").length !== 14;
+    const message = invalid ? "Informe um CNPJ com 14 dígitos." : "";
+    field.setCustomValidity(message);
+    field.setAttribute("aria-invalid", String(invalid));
+    $("companyCnpjError").textContent = show ? message : "";
+    $("companyCnpjError").hidden = !show || !message;
+    return !invalid;
+  }
+  $("companyCnpj").addEventListener("blur", () => validateCnpj());
   $("companyCnpj").addEventListener("input", () =>
-    $("companyCnpj").setCustomValidity(""),
+    validateCnpj(!$("companyCnpjError").hidden),
   );
   updateCertificateSource();
   load();

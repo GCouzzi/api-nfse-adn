@@ -23,6 +23,7 @@ export interface Company {
   certificado_id: string | null;
   created_at: string;
   updated_at: string;
+  removida_em?: string | null;
 }
 
 export interface CertificateRecord {
@@ -53,6 +54,7 @@ export interface CertificateUpload {
 }
 
 export interface CertificateRegistry extends CertificateProvider {
+  remove(id: string): Promise<{ aviso?: string }>;
   files(): Promise<string[]>;
   register(
     filename: string,
@@ -100,17 +102,26 @@ export interface PdfExport {
 
 export interface SqlExecutor {
   query<T>(sql: string, params?: Array<string | number | null>): Promise<T[]>;
+  atomic(
+    statements: { sql: string; params?: Array<string | number | null> }[],
+  ): Promise<void>;
 }
 
 export interface ApplicationRepository {
   init(environment: Environment): Promise<void>;
   listCompanies(): Promise<Company[]>;
   getCompany(id: string): Promise<Company | null>;
-  getCompanyByCnpj(cnpj: string): Promise<Company | null>;
+  getCompanyByCnpj(
+    cnpj: string,
+    includeRemoved?: boolean,
+  ): Promise<Company | null>;
   saveCompany(company: Company): Promise<void>;
+  removeCompany(id: string): Promise<void>;
   listCertificates(): Promise<CertificateRecord[]>;
   getCertificate(id: string): Promise<CertificateRecord | null>;
   saveCertificate(certificate: CertificateRecord): Promise<void>;
+  removeCertificate(id: string): Promise<boolean>;
+  isCertificateFileRegistered(filename: string): Promise<boolean>;
   linkLegacyNotes(company: Company, environment: Environment): Promise<void>;
   linkDocument(
     company: Company,

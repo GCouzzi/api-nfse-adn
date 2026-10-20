@@ -27,6 +27,8 @@ O cadastro de arquivos já disponíveis aceita somente arquivos da pasta permiti
 
 Um certificado pode ser vinculado a várias empresas. A troca do arquivo exige revalidação no cadastro; a aplicação detecta alterações pelo fingerprint do arquivo. Empresas inativas mantêm as notas acessíveis, mas não podem iniciar novas sincronizações.
 
+O botão **Remover** solicita confirmação. Remover uma empresa preserva os documentos e o histórico, que voltam a ficar disponíveis ao cadastrar novamente o mesmo CNPJ. Para remover um certificado, desvincule-o das empresas primeiro. A remoção apaga sua senha cadastrada e, para arquivos enviados pelo painel sem outro cadastro usando o mesmo arquivo, também apaga o arquivo. Arquivos colocados manualmente no servidor são mantidos.
+
 Cadastros, consultas e downloads exigem a sessão do administrador ou um `API_TOKEN` de integração válido. O administrador e o token possuem acesso a todas as empresas cadastradas. A seleção da empresa define o contexto da consulta e não constitui controle de acesso por usuário.
 
 ### Pasta local, VPS e Docker Secrets

@@ -295,6 +295,14 @@ As rotas de upload recebem `multipart/form-data` com exatamente um arquivo no ca
 
 O cadastro retorna `201`; a substituição, `200`. Erros de conteúdo, senha e formulário retornam `400`; arquivo acima do limite retorna `413`; formato de requisição diferente de multipart retorna `415`; ID não encontrado retorna `404`. Ausência de chave de criptografia ou falha de armazenamento retorna `503`. Para substituir um certificado por upload, use seu ID existente; os vínculos com empresas são preservados e o arquivo anterior não é sobrescrito.
 
+### Remoção de empresas e certificados
+
+`DELETE /api/empresas/:id` remove a empresa dos cadastros disponíveis e desvincula seu certificado, preservando as notas, os XMLs e o histórico. Cadastrar novamente o mesmo CNPJ recupera o cadastro e seus vínculos com os documentos. Um ID inexistente ou já removido retorna `404`.
+
+`DELETE /api/certificados/:id` apaga o cadastro e a senha criptografada. Retorna `409` enquanto o certificado estiver vinculado a alguma empresa e `404` para um ID inexistente. Arquivos enviados pelo painel são apagados quando nenhum outro cadastro utiliza o mesmo arquivo; arquivos disponibilizados manualmente permanecem no servidor. A resposta pode conter `data.aviso` quando o arquivo é mantido ou não pode ser apagado.
+
+As duas operações exigem a mesma autenticação das demais rotas `/api` e proteção CSRF quando utilizadas com a sessão do painel.
+
 ## PDFs e exportações
 
 ### `GET /api/notas/:chaveAcesso/pdf`

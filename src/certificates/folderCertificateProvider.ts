@@ -171,6 +171,39 @@ export class FolderCertificateProvider implements CertificateRegistry {
     return record;
   }
 
+  async remove(id: string): Promise<{ aviso?: string }> {
+    const certificate = await this.repository.getCertificate(id);
+    if (!certificate)
+      throw new ApplicationError("Certificado não encontrado.", 404);
+    if (!(await this.repository.removeCertificate(id))) {
+      throw new ApplicationError(
+        "Desvincule o certificado das empresas antes de removê-lo.",
+        409,
+      );
+    }
+    const managed =
+      /^certificado-[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}\.pfx$/i.test(
+        certificate.arquivo,
+      );
+    if (!managed)
+      return {
+        aviso:
+          "Cadastro removido. O arquivo disponibilizado manualmente permanece na pasta do servidor.",
+      };
+    if (await this.repository.isCertificateFileRegistered(certificate.arquivo))
+      return {};
+    try {
+      await unlink(path.join(this.directory, certificate.arquivo));
+      return {};
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+      return {
+        aviso:
+          "Cadastro removido, mas não foi possível apagar o arquivo da pasta do servidor. Verifique as permissões.",
+      };
+    }
+  }
+
   async upload(
     input: CertificateUpload,
     id: string = crypto.randomUUID(),

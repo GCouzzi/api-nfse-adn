@@ -38,7 +38,7 @@ export class CompanyService {
       throw new ApplicationError(
         "Informe os dados da empresa em um objeto JSON.",
       );
-    const existing = id ? await this.require(id) : null;
+    let existing = id ? await this.require(id) : null;
     const nome = typeof input.nome === "string" ? input.nome.trim() : "";
     const cnpj =
       typeof input.cnpj === "string" ? input.cnpj.replace(/\D/g, "") : "";
@@ -52,12 +52,15 @@ export class CompanyService {
       throw new ApplicationError(
         "O CNPJ não pode ser alterado. Cadastre outra empresa.",
       );
-    const duplicate = await this.repository.getCompanyByCnpj(cnpj);
-    if (duplicate && duplicate.id !== id)
-      throw new ApplicationError(
-        "Já existe uma empresa cadastrada com este CNPJ.",
-        409,
-      );
+    const duplicate = await this.repository.getCompanyByCnpj(cnpj, true);
+    if (duplicate && duplicate.id !== id) {
+      if (!id && duplicate.removida_em) existing = duplicate;
+      else
+        throw new ApplicationError(
+          "Já existe uma empresa cadastrada com este CNPJ.",
+          409,
+        );
+    }
     if (input.ativa !== undefined && typeof input.ativa !== "boolean")
       throw new ApplicationError("Situação da empresa inválida.");
     const certificateId =
@@ -97,5 +100,10 @@ export class CompanyService {
         404,
       );
     }
+  }
+
+  async remove(id: string): Promise<void> {
+    await this.require(id);
+    await this.repository.removeCompany(id);
   }
 }

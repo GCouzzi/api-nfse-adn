@@ -77,10 +77,9 @@
       <form class="card search-card" id="searchForm">
         <div class="field grow">
           <label for="cnpj">Empresa de consulta</label>
-          <select id="cnpj" required aria-describedby="companyHelp">
+          <select id="cnpj" required>
             <option value="">Carregando empresas…</option>
           </select>
-          <small id="companyHelp">Selecione uma empresa cadastrada.</small>
         </div>
         <div class="field">
           <label for="papel">Papel</label>
@@ -207,18 +206,27 @@
               PDFs do mês
             </button>
             <button class="btn btn-ghost" id="btnPdfTodos" type="button">
-              PDFs de todas as notas
+              Todos os PDFs
             </button>
             <button class="btn btn-ghost" id="btnZipMes" type="button" hidden>
-              Baixar mês completo (ZIP)
+              XMLs do mês (ZIP)
             </button>
             <button class="btn btn-ghost" id="btnZipCnpj" type="button">
-              ZIP de todas as notas do CNPJ
+              Todos os XMLs (ZIP)
             </button>
           </div>
         </div>
         <div class="table-wrap">
-          <table>
+          <table class="notes-table" role="table">
+            <colgroup>
+              <col class="col-number" />
+              <col class="col-dates" />
+              <col class="col-party" />
+              <col class="col-party" />
+              <col class="col-value" />
+              <col class="col-status" />
+              <col class="col-actions" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Nº</th>

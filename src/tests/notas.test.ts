@@ -303,6 +303,17 @@ test("API token protects company administration and certificate responses redact
     });
     expect((await fetch(`${apiBase}/empresas`)).status).toBe(401);
     expect((await fetch(`${apiBase}/certificados`)).status).toBe(401);
+    expect(
+      (await fetch(`${apiBase}/empresas/nao-autorizado`, { method: "DELETE" }))
+        .status,
+    ).toBe(401);
+    expect(
+      (
+        await fetch(`${apiBase}/certificados/nao-autorizado`, {
+          method: "DELETE",
+        })
+      ).status,
+    ).toBe(401);
     const response = await authenticatedFetch(`${apiBase}/certificados`, {
       headers: { Authorization: `Bearer ${config.apiToken}` },
     });

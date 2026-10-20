@@ -23,6 +23,12 @@ test("legacy migration snapshots old notes once and never attributes new distrib
     );
   insert(1);
   const repository = new SqlApplicationRepository({
+    atomic: async (statements) => {
+      db.transaction(() => {
+        for (const { sql, params = [] } of statements)
+          db.query(sql).run(...params);
+      })();
+    },
     query: async <T>(sql: string, params: Array<string | number | null> = []) =>
       db.query<T, any[]>(sql).all(...params),
   });

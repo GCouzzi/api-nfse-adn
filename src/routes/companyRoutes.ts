@@ -64,6 +64,21 @@ router.get(
   }),
 );
 
+router.delete(
+  "/empresas/:id",
+  handler(async (req, res) => {
+    await companies.remove(req.params.id);
+    res.json({ success: true });
+  }),
+);
+
+router.delete(
+  "/certificados/:id",
+  handler(async (req, res) => {
+    res.json({ success: true, data: await certificates.remove(req.params.id) });
+  }),
+);
+
 router.get(
   "/certificados",
   handler(async (_req, res) => {

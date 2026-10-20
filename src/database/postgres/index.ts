@@ -43,6 +43,25 @@ export class PostgresRepository implements IDatabaseRepository {
       console.error("[PostgresPool] Erro inesperado no cliente ocioso:", err);
     });
     this.application = new SqlApplicationRepository({
+      atomic: async (statements) => {
+        const client = await this.pool.connect();
+        try {
+          await client.query("BEGIN");
+          for (const { sql, params = [] } of statements) {
+            let position = 0;
+            await client.query(
+              sql.replace(/\?/g, () => `$${++position}`),
+              params,
+            );
+          }
+          await client.query("COMMIT");
+        } catch (error) {
+          await client.query("ROLLBACK");
+          throw error;
+        } finally {
+          client.release();
+        }
+      },
       query: async <T>(
         sql: string,
         params: Array<string | number | null> = [],

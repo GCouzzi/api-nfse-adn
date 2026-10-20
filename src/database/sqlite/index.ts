@@ -18,6 +18,12 @@ import type {
 export class SqliteRepository implements IDatabaseRepository {
   private db!: Database;
   application = new SqlApplicationRepository({
+    atomic: async (statements) => {
+      this.db.transaction(() => {
+        for (const { sql, params = [] } of statements)
+          this.db.query(sql).run(...params);
+      })();
+    },
     query: async <T>(
       sql: string,
       params: Array<string | number | null> = [],

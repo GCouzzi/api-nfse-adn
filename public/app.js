@@ -141,7 +141,7 @@
       state.companies = json.data || [];
       const available = state.companies;
       $("cnpj").innerHTML =
-        '<option value="">Selecione a empresa</option>' +
+        `<option value="">${available.length ? "Selecione a empresa" : "Nenhuma empresa cadastrada"}</option>` +
         available
           .map(
             (company) =>
@@ -151,12 +151,9 @@
       const last = selectedCnpj || localStorage.getItem("nfse_last_cnpj");
       if (available.some((company) => company.cnpj === last))
         $("cnpj").value = last;
-      $("companyHelp").textContent = available.length
-        ? "Empresas inativas permitem consultar notas já armazenadas."
-        : "Nenhuma empresa cadastrada. Acesse Empresas e certificados para começar.";
     } catch (error) {
       $("cnpj").innerHTML = '<option value="">Empresas indisponíveis</option>';
-      $("companyHelp").textContent = error.message;
+      if (error.message !== "Não autorizado") toast(error.message, "error");
     }
     watchExports();
   }
@@ -295,18 +292,18 @@
           const month = monthKey(n.competencia);
           let heading = "";
           if (month !== previousMonth) {
-            heading = `<tr class="month-heading"><th colspan="7" scope="rowgroup"><div class="month-heading-content"><div><strong>${esc(monthLabel(month))}</strong><small>${rows.filter((row) => monthKey(row.competencia) === month).length} nota(s) nesta página</small></div>${month ? `<div class="actions"><button type="button" class="btn btn-ghost" data-act="pdfmes" data-month="${esc(month)}">PDFs do mês</button><button type="button" class="btn btn-ghost" data-act="zipmes" data-month="${esc(month)}">Baixar mês completo (ZIP)</button></div>` : ""}</div></th></tr>`;
+            heading = `<tr class="month-heading"><th colspan="7" scope="rowgroup"><div class="month-heading-content"><div><strong>${esc(monthLabel(month))}</strong><small>${rows.filter((row) => monthKey(row.competencia) === month).length} nota(s) nesta página</small></div>${month ? `<div class="actions"><button type="button" class="btn btn-ghost" data-act="pdfmes" data-month="${esc(month)}">PDFs do mês</button><button type="button" class="btn btn-ghost" data-act="zipmes" data-month="${esc(month)}">XMLs do mês (ZIP)</button></div>` : ""}</div></th></tr>`;
             previousMonth = month;
           }
           return `${heading}
-        <tr>
-          <td><b>${esc(n.numero_nfse || "—")}</b>${n.serie ? `<br><small style="color:var(--muted)">série ${esc(n.serie)}</small>` : ""}</td>
-          <td><b>${esc(monthKey(n.competencia) ? n.competencia.slice(0, 10).split("-").reverse().join("/") : "—")}</b><br><small>Emissão: ${fmtDate(n.data_emissao)}</small></td>
-          <td class="who"><strong title="${esc(n.razao_social_prestador)}">${esc(n.razao_social_prestador || "—")}</strong><small>${esc(fmtCnpj(n.cnpj_prestador))}</small></td>
-          <td class="who"><strong title="${esc(n.razao_social_tomador)}">${esc(n.razao_social_tomador || "—")}</strong><small>${esc(n.cnpj_tomador ? fmtCnpj(n.cnpj_tomador) : n.cpf_tomador || "—")}</small></td>
-          <td class="num">${brl(n.valor_servicos)}</td>
-          <td><span class="st ${esc(n.status)}">${esc(n.status)}</span></td>
-          <td class="num"><span class="row-actions">
+        <tr class="note-row">
+          <td data-label="Número"><b>${esc(n.numero_nfse || "—")}</b>${n.serie ? `<br><small style="color:var(--muted)">série ${esc(n.serie)}</small>` : ""}</td>
+          <td data-label="Competência / Emissão"><b>${esc(monthKey(n.competencia) ? n.competencia.slice(0, 10).split("-").reverse().join("/") : "—")}</b><br><small>Emissão: ${fmtDate(n.data_emissao)}</small></td>
+          <td class="who" data-label="Prestador"><strong title="${esc(n.razao_social_prestador)}">${esc(n.razao_social_prestador || "—")}</strong><small>${esc(fmtCnpj(n.cnpj_prestador))}</small></td>
+          <td class="who" data-label="Tomador"><strong title="${esc(n.razao_social_tomador)}">${esc(n.razao_social_tomador || "—")}</strong><small>${esc(n.cnpj_tomador ? fmtCnpj(n.cnpj_tomador) : n.cpf_tomador || "—")}</small></td>
+          <td class="num" data-label="Valor">${brl(n.valor_servicos)}</td>
+          <td data-label="Status"><span class="st ${esc(n.status)}">${esc(n.status)}</span></td>
+          <td class="num note-actions" data-label="Ações"><span class="row-actions">
             <button class="btn btn-ghost btn-sm" data-act="detalhe" data-chave="${esc(n.chave_acesso)}">Detalhes</button>
             <button class="btn btn-ghost btn-sm" data-act="xml" data-chave="${esc(n.chave_acesso)}">XML</button>
             <button class="btn btn-ghost btn-sm" data-act="pdf" data-chave="${esc(n.chave_acesso)}">PDF</button>

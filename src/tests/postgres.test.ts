@@ -150,6 +150,37 @@ test("PostgreSQL repository initializes companies, scopes notes, imports legacy 
     expect(
       (await repository.application.getCompany(a.id))?.certificado_id,
     ).toBe(certificate.id);
+    expect(await repository.application.removeCertificate(certificate.id)).toBe(
+      false,
+    );
+    await companies.remove(a.id);
+    expect(await repository.application.getCompany(a.id)).toBeNull();
+    expect(await repository.application.getCompanyByCnpj(a.cnpj)).toBeNull();
+    expect(
+      await repository.application.hasNote(a.id, config.adnEnv, chave),
+    ).toBe(true);
+    expect((await repository.application.getExport(job.id))?.status).toBe(
+      "COMPLETED",
+    );
+    await expect(
+      repository.application.saveCompany({
+        ...a,
+        nome: "Não persistir",
+        certificado_id: "inexistente",
+      }),
+    ).rejects.toThrow();
+    expect(await repository.application.getCompany(a.id)).toBeNull();
+    const restored = await companies.save({ nome: a.nome, cnpj: a.cnpj });
+    expect(restored.id).toBe(a.id);
+    expect(
+      await repository.application.hasNote(restored.id, config.adnEnv, chave),
+    ).toBe(true);
+    expect(await repository.application.removeCertificate(certificate.id)).toBe(
+      true,
+    );
+    expect(
+      await repository.application.getCertificate(certificate.id),
+    ).toBeNull();
   } finally {
     await repository.close();
   }

@@ -449,6 +449,69 @@ test("certificate upload removes its file if persistence fails and refuses missi
   }
 });
 
+test("removal preserves company notes, restores the same CNPJ and protects shared certificate files", async () => {
+  const { repository, companies, a, b } = await database();
+  const directory = path.join(sandbox, "removal");
+  const provider = new FolderCertificateProvider(
+    repository.application,
+    directory,
+    () => secret,
+  );
+  try {
+    await note(repository, a, 55);
+    const certificate = await provider.upload({
+      filename: "teste.pfx",
+      content: pfx,
+      password: "senha-teste",
+    });
+    const shared = await provider.register(certificate.arquivo, "senha-teste");
+    await companies.save(
+      { nome: a.nome, cnpj: a.cnpj, certificado_id: certificate.id },
+      a.id,
+    );
+    await expect(provider.remove(certificate.id)).rejects.toThrow("Desvincule");
+    await companies.remove(a.id);
+    expect(await repository.application.getCompany(a.id)).toBeNull();
+    expect(
+      (await repository.application.listCompanies()).map(
+        (company) => company.id,
+      ),
+    ).toEqual([b.id]);
+    expect(
+      await repository.application.hasNote(a.id, environment, key(55)),
+    ).toBe(true);
+    await expect(
+      repository.application.saveCompany({
+        ...a,
+        nome: "Não persistir",
+        certificado_id: "inexistente",
+      }),
+    ).rejects.toThrow();
+    expect(await repository.application.getCompany(a.id)).toBeNull();
+    const restored = await companies.save({ nome: a.nome, cnpj: a.cnpj });
+    expect(restored.id).toBe(a.id);
+    expect(restored.certificado_id).toBeNull();
+    expect(
+      await repository.application.hasNote(restored.id, environment, key(55)),
+    ).toBe(true);
+    await provider.remove(certificate.id);
+    expect(
+      (await readFile(path.join(directory, certificate.arquivo))).length,
+    ).toBeGreaterThan(0);
+    await provider.remove(shared.id);
+    expect(await provider.files()).toEqual([]);
+    await writeFile(path.join(directory, "manual.pfx"), pfx);
+    const manual = await provider.register("manual.pfx", "senha-teste");
+    expect((await provider.remove(manual.id)).aviso).toContain("manualmente");
+    expect(
+      (await readFile(path.join(directory, "manual.pfx"))).length,
+    ).toBeGreaterThan(0);
+    await expect(provider.remove(manual.id)).rejects.toThrow("não encontrado");
+  } finally {
+    await repository.close();
+  }
+});
+
 test("real ADN calls fail without credentials even with no HTTP client", async () => {
   const client = new AdnClient(undefined, false);
   await expect(

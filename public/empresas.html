@@ -34,7 +34,7 @@
           seu histórico disponíveis para consulta.
         </p>
         <div class="table-wrap">
-          <table>
+          <table class="management-table company-table" role="table">
             <thead>
               <tr>
                 <th>Empresa / CNPJ</th>
@@ -72,7 +72,9 @@
               minlength="14"
               maxlength="18"
               placeholder="00.000.000/0000-00"
+              aria-describedby="companyCnpjError"
             />
+            <small id="companyCnpjError" class="form-error" hidden></small>
           </div>
           <div class="field grow">
             <label for="companyCertificate">Certificado utilizado</label
@@ -112,7 +114,7 @@
           depois vincule-o à empresa.
         </p>
         <div class="table-wrap">
-          <table>
+          <table class="management-table certificate-table" role="table">
             <thead>
               <tr>
                 <th>Titular / Arquivo</th>

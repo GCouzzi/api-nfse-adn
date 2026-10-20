@@ -844,6 +844,27 @@
       }
     },
     "/api/empresas/{id}": {
+      "delete": {
+        "summary": "Remover empresa preservando notas e histórico",
+        "tags": ["Empresas"],
+        "description": "Remove a empresa dos cadastros disponíveis e desvincula seu certificado. Cadastrar o mesmo CNPJ novamente recupera o histórico. Com sessão de painel, envie X-CSRF-Token.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Empresa removida; documentos e histórico preservados"
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "description": "Token CSRF inválido" },
+          "404": { "description": "Empresa não encontrada" }
+        }
+      },
       "put": {
         "tags": ["Empresas"],
         "summary": "Edita empresa e certificado vinculado; o CNPJ é imutável",
@@ -1037,6 +1058,28 @@
       }
     },
     "/api/certificados/{id}": {
+      "delete": {
+        "summary": "Remover certificado e senha cadastrada",
+        "tags": ["Certificados"],
+        "description": "Bloqueia a remoção de certificados vinculados a empresas. Arquivos enviados pelo painel são apagados quando não usados por outro cadastro; arquivos manuais são preservados. A resposta pode conter data.aviso. Com sessão de painel, envie X-CSRF-Token.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cadastro e senha removidos; eventual aviso sobre o arquivo em data.aviso"
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "description": "Token CSRF inválido" },
+          "404": { "description": "Certificado não encontrado" },
+          "409": { "description": "Certificado ainda vinculado a uma empresa" }
+        }
+      },
       "put": {
         "tags": ["Certificados"],
         "summary": "Substitui ou revalida um certificado",

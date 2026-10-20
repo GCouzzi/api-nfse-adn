@@ -76,7 +76,11 @@ for (let id = 1; id <= 3; id++) {
     chave_acesso: chave,
     nsu: id,
     cnpj_prestador: company.cnpj,
-    razao_social_prestador: company.nome,
+    razao_social_prestador:
+      "Prestadora de Serviços de Consultoria e Desenvolvimento de Sistemas de Informação",
+    razao_social_tomador:
+      "Tomadora de Serviços Administrativos e Gestão Empresarial com Nome Extenso",
+    cnpj_tomador: "98765432000188",
     numero_nfse: String(id),
     competencia: `${month}-10`,
     valor_servicos: 100,
@@ -234,6 +238,46 @@ try {
   await page.waitForFunction(() =>
     document.querySelector("#tbody")!.textContent!.includes("setembro"),
   );
+  for (const width of [1440, 1366, 1024, 768, 390, 375, 360]) {
+    await page.setViewport({ width, height: 900 });
+    const overflow = await page.evaluate(() => ({
+      page: document.documentElement.scrollWidth > window.innerWidth + 1,
+      tables: [...document.querySelectorAll(".table-wrap")].filter(
+        (element) => element.scrollWidth > element.clientWidth + 1,
+      ).length,
+      actions: [
+        ...document.querySelectorAll("#tbody button, .table-toolbar button"),
+      ].filter((element) => {
+        if (!(element instanceof HTMLElement) || !element.offsetHeight)
+          return false;
+        const box = element.getBoundingClientRect();
+        return box.left < 0 || box.right > window.innerWidth + 1;
+      }).length,
+    }));
+    assert.deepEqual(
+      overflow,
+      { page: false, tables: 0, actions: 0 },
+      `Notes layout at ${width}px: ${JSON.stringify(overflow)}`,
+    );
+    const filters = await page.evaluate(() =>
+      ["cnpj", "papel", "status", "competencia"].map(
+        (id) => document.getElementById(id)!.getBoundingClientRect().top,
+      ),
+    );
+    if (width >= 1024)
+      assert(
+        filters.every((top) => Math.abs(top - filters[0]) <= 1),
+        "Filter inputs must align",
+      );
+    if (width === 1366 || width === 390) {
+      await mkdir("scratch", { recursive: true });
+      await page.screenshot({
+        path: `scratch/notas-${width}.png`,
+        fullPage: true,
+      });
+    }
+  }
+  await page.setViewport({ width: 1440, height: 1000 });
   assert.equal(
     await page.$$eval("#tbody tr:not(.month-heading)", (rows) => rows.length),
     3,
@@ -291,6 +335,16 @@ try {
       .textContent!.includes("Empresa de Teste"),
   );
   await page.type("#companyName", "Outra empresa");
+  await page.type("#companyCnpj", "123");
+  await page.click("#companyName");
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.id),
+    "companyName",
+    "Invalid CNPJ must not trap focus",
+  );
+  await page.$eval("#companyCnpj", (input) => {
+    (input as HTMLInputElement).value = "";
+  });
   await page.type("#companyCnpj", "98765432000188");
   await page.click("#companySave");
   await page.waitForFunction(() =>
@@ -379,6 +433,64 @@ try {
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   );
+  await page.waitForSelector(
+    `[data-remove-certificate="${uploadedCertificate.id}"]`,
+  );
+  await page.click(`[data-remove-certificate="${uploadedCertificate.id}"]`);
+  await page.waitForFunction(() =>
+    document.getElementById("pageError")!.textContent!.includes("Desvincule"),
+  );
+  page.once("dialog", (dialog) => {
+    void dialog.accept();
+  });
+  await page.click(`[data-remove-company="${company.id}"]`);
+  await page.waitForFunction(
+    (id) => !document.querySelector(`[data-company="${id}"]`),
+    {},
+    company.id,
+  );
+  assert.equal(await repository.application.getCompany(company.id), null);
+  assert(
+    await repository.findByChave("1".padStart(50, "0")),
+    "Removing company must preserve notes",
+  );
+  await page.type("#companyName", company.nome);
+  await page.type("#companyCnpj", company.cnpj);
+  await page.click("#companySave");
+  await page.waitForSelector(`[data-company="${company.id}"]`);
+  assert(
+    await repository.application.hasNote(
+      company.id,
+      config.adnEnv,
+      "1".padStart(50, "0"),
+    ),
+    "Restoring CNPJ must recover notes",
+  );
+  page.once("dialog", (dialog) => {
+    void dialog.accept();
+  });
+  await page.click(`[data-remove-company="${company.id}"]`);
+  await page.waitForFunction(
+    (id) => !document.querySelector(`[data-company="${id}"]`),
+    {},
+    company.id,
+  );
+  page.once("dialog", (dialog) => {
+    void dialog.accept();
+  });
+  await page.click(`[data-remove-certificate="${uploadedCertificate.id}"]`);
+  await page.waitForFunction(
+    (id) => !document.querySelector(`[data-certificate="${id}"]`),
+    {},
+    uploadedCertificate.id,
+  );
+  assert.equal(
+    await repository.application.getCertificate(uploadedCertificate.id),
+    null,
+  );
+  await assert.rejects(
+    readFile(path.join(config.certificatesDir, uploadedCertificate.arquivo)),
+  );
   await page.click("[data-auth]");
   await page.waitForSelector("#modalLogin[open]");
   assert.equal(
@@ -388,7 +500,7 @@ try {
   assert.equal((await fetch(origin + "/api/empresas")).status, 401);
   assert.deepEqual(errors, []);
   console.log(
-    "Browser smoke: login, cookie HttpOnly compartilhado, logout, upload e revalidação de certificado, vínculo com empresa, recuperação de lote, ZIP com 3 PDFs, limpeza, PDF individual e layout móvel aprovados.",
+    "Browser smoke: login, upload, remoção e restauração de empresa, remoção de certificado, foco do CNPJ, notas sem rolagem horizontal em 7 tamanhos, recuperação de lote, PDFs e logout aprovados.",
   );
 } finally {
   await browser.close();

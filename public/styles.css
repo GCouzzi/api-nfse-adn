@@ -273,10 +273,10 @@ body {
 
 .search-card {
   padding: 20px;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 14px;
-  align-items: flex-end;
-  flex-wrap: wrap;
+  align-items: start;
 }
 .field {
   display: flex;
@@ -510,7 +510,8 @@ select:focus {
   padding: 11px 0;
 }
 .table-wrap {
-  overflow-x: auto;
+  min-width: 0;
+  max-width: 100%;
 }
 table {
   width: 100%;
@@ -548,10 +549,7 @@ td.num {
 .who strong {
   display: block;
   font-weight: 600;
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .who small {
   color: var(--muted);
@@ -579,8 +577,98 @@ td.num {
   color: var(--warn);
 }
 .row-actions {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+}
+.row-actions .btn:first-child {
+  grid-column: 1 / -1;
+}
+.row-actions .btn {
+  min-width: 0;
+  width: 100%;
+  padding: 8px 6px;
+  justify-content: center;
+}
+.notes-table,
+.management-table {
+  table-layout: fixed;
+}
+.notes-table .col-number {
+  width: 6%;
+}
+.notes-table .col-dates {
+  width: 18%;
+}
+.notes-table .col-party {
+  width: 18%;
+}
+.notes-table .col-value {
+  width: 12%;
+}
+.notes-table .col-status {
+  width: 12%;
+}
+.notes-table .col-actions {
+  width: 16%;
+}
+.notes-table th,
+.notes-table td {
+  padding-left: 10px;
+  padding-right: 10px;
+  overflow-wrap: anywhere;
+}
+.notes-table th {
+  white-space: normal;
+}
+.notes-table td.num {
+  white-space: normal;
+}
+.notes-table .st {
+  display: inline-block;
+  max-width: 100%;
+  padding: 4px 6px;
+  letter-spacing: 0;
+}
+.results-heading {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.table-toolbar > .actions {
+  flex: 1 1 520px;
+  justify-content: flex-end;
+}
+.table-toolbar .btn {
+  flex: 1 1 145px;
+}
+.management-table td,
+.management-table th {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.company-table th:first-child {
+  width: 30%;
+}
+.company-table th:nth-child(2) {
+  width: 34%;
+}
+.company-table th:nth-child(3) {
+  width: 12%;
+}
+.certificate-table th:first-child {
+  width: 52%;
+}
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.btn-danger {
+  color: var(--bad);
+  border-color: rgba(255, 107, 129, 0.3);
+}
+.field [aria-invalid="true"] {
+  border-color: var(--bad);
 }
 .pager {
   display: flex;
@@ -857,7 +945,7 @@ pre {
 
 /* Consulta e importação têm propósitos e hierarquia próprios. */
 .search-actions {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: 1fr 1.3fr;
   gap: 24px;
@@ -883,6 +971,14 @@ pre {
 .search-card .field {
   flex: 1 1 180px;
   min-width: 0;
+  grid-column: span 3;
+}
+.search-card .field:first-child {
+  grid-column: span 5;
+}
+.search-card .field:nth-child(2),
+.search-card .field:nth-child(3) {
+  grid-column: span 2;
 }
 .search-card .field.grow {
   flex: 2 1 260px;
@@ -917,6 +1013,7 @@ input[type="month"] {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
 }
 .month-heading strong {
   font-size: 15px;
@@ -956,6 +1053,159 @@ button:focus-visible {
   .search-card .field,
   .search-card .field.grow {
     flex-basis: 100%;
+  }
+}
+@media (max-width: 960px) {
+  .notes-table,
+  .notes-table tbody,
+  .notes-table tr,
+  .notes-table td,
+  .notes-table .month-heading th {
+    display: block;
+    width: 100%;
+  }
+  .notes-table colgroup {
+    display: none;
+  }
+  .notes-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .notes-table tbody {
+    padding: 16px;
+  }
+  .notes-table .note-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .notes-table .note-row td {
+    border: 0;
+    padding: 0;
+    min-width: 0;
+    text-align: left;
+  }
+  .notes-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+  .notes-table .who,
+  .notes-table .note-actions {
+    grid-column: 1 / -1;
+  }
+  .notes-table .row-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .notes-table .row-actions .btn:first-child {
+    grid-column: auto;
+  }
+  .notes-table .month-heading th {
+    padding: 8px 0 16px;
+    border: 0;
+    background: transparent;
+  }
+  .month-heading-content {
+    align-items: flex-start;
+  }
+  .month-heading-content > div,
+  .month-heading-content > .actions {
+    width: 100%;
+  }
+  .month-heading-content .btn {
+    flex: 1 1 150px;
+    width: auto;
+  }
+  .month-heading small {
+    display: block;
+    margin: 4px 0 0;
+  }
+}
+@media (max-width: 800px) {
+  .search-card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .search-card > .field:nth-child(n) {
+    grid-column: auto;
+  }
+}
+@media (max-width: 720px) {
+  .table-toolbar .btn {
+    flex: 0 0 auto;
+  }
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stat:last-child {
+    grid-column: 1 / -1;
+  }
+  .topbar {
+    position: static;
+  }
+  .topbar > .actions > .btn {
+    width: auto;
+    flex: 1 1 120px;
+  }
+  .management-table,
+  .management-table tbody,
+  .management-table tr,
+  .management-table td {
+    display: block;
+    width: 100%;
+  }
+  .management-table thead {
+    display: none;
+  }
+  .management-table tr {
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 12px;
+  }
+  .management-table td {
+    padding: 8px 0;
+    border: 0;
+  }
+  .management-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    margin-bottom: 6px;
+  }
+  .table-actions .btn {
+    flex: 1 1 120px;
+  }
+  .topbar-right {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pager {
+    gap: 8px;
+    padding: 14px 12px;
+  }
+  .pager .btn {
+    padding: 10px;
+  }
+}
+@media (max-width: 480px) {
+  .search-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .search-card .btn {
+    max-width: 100%;
+    white-space: normal;
   }
 }
 @media (prefers-reduced-motion: reduce) {
